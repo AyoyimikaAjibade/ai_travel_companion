@@ -1,0 +1,19 @@
+{
+  "slots": {
+    "origin": "SFO",
+    "destination": "DOH",
+    "dates": {
+      "start": "2023-11-10",
+      "end": "2023-11-15"
+    },
+    "pax": {
+      "adults": 2
+    },
+    "budget": 1500,
+    "hotel": {
+      "ratingMin": 4,
+      "amenities": ["breakfast", "pool"]
+    }
+  },
+  "missing": []
+}

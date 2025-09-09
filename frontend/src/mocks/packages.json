@@ -1,0 +1,99 @@
+{
+  "packages": [
+    {
+      "id": "pkg_1",
+      "title": "Best Value Package",
+      "total": 1420,
+      "score": 9.2,
+      "destination": "Doha",
+      "dates": {
+        "start": "2023-11-10",
+        "end": "2023-11-15"
+      },
+      "bullets": [
+        "Non-stop flights on Qatar Airways",
+        "5-star hotel with breakfast included",
+        "Infinity pool with city views",
+        "Free airport transfer"
+      ],
+      "flight": {
+        "description": "Qatar Airways, Economy Class, Non-stop",
+        "deeplink": "https://www.expedia.com/Flight-Search"
+      },
+      "hotel": {
+        "description": "Souq Waqif Boutique Hotels, 5 stars, Breakfast included",
+        "deeplink": "https://www.booking.com/Hotel-View"
+      },
+      "car": {
+        "description": "Intermediate SUV with unlimited mileage",
+        "deeplink": "https://www.hertz.com/Car-Rental"
+      },
+      "attractions": [
+        {
+          "name": "Souq Waqif Market Tour",
+          "deeplink": "https://www.tiqets.com/Souq-Waqif-Tour"
+        },
+        {
+          "name": "Dhow Cruise with Dinner",
+          "deeplink": "https://www.tiqets.com/Dhow-Cruise"
+        }
+      ]
+    },
+    {
+      "id": "pkg_2",
+      "title": "Comfort Package",
+      "total": 1675,
+      "score": 8.7,
+      "destination": "Doha",
+      "dates": {
+        "start": "2023-11-10",
+        "end": "2023-11-15"
+      },
+      "bullets": [
+        "1-stop flights on Emirates",
+        "4-star beachfront resort",
+        "Private pool access",
+        "Spa credit included"
+      ],
+      "flight": {
+        "description": "Emirates, Economy Class, 1 stop in Dubai",
+        "deeplink": "https://www.expedia.com/Flight-Search"
+      },
+      "hotel": {
+        "description": "The Pearl Resort, 4 stars, Beachfront",
+        "deeplink": "https://www.booking.com/Hotel-View"
+      },
+      "attractions": [
+        {
+          "name": "Desert Safari Experience",
+          "deeplink": "https://www.tiqets.com/Desert-Safari"
+        }
+      ]
+    },
+    {
+      "id": "pkg_3",
+      "title": "Budget Package",
+      "total": 1125,
+      "score": 7.8,
+      "destination": "Doha",
+      "dates": {
+        "start": "2023-11-10",
+        "end": "2023-11-15"
+      },
+      "bullets": [
+        "2-stop flights on Oman Air",
+        "3-star city center hotel",
+        "Complimentary breakfast",
+        "Walking distance to attractions"
+      ],
+      "flight": {
+        "description": "Oman Air, Economy Class, 2 stops",
+        "deeplink": "https://www.expedia.com/Flight-Search"
+      },
+      "hotel": {
+        "description": "City Center Hotel, 3 stars, Central location",
+        "deeplink": "https://www.booking.com/Hotel-View"
+      }
+    }
+  ]
+}
