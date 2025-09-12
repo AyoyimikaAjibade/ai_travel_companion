@@ -1,8 +1,8 @@
 // App.js
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { StyleSheet, View, Text } from "react-native";
+import { StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -13,42 +13,37 @@ import {
   Urbanist_600SemiBold,
   Urbanist_700Bold,
 } from "@expo-google-fonts/urbanist";
-import * as SplashScreen from "expo-splash-screen";
+// ⚠️ Alias expo splash utils to avoid name collision
+import * as ExpoSplash from "expo-splash-screen";
 
-// Import screens
+// Screens
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import PackagesScreen from "./src/screens/PackagesScreen";
 import PackageDetailsScreen from "./src/screens/PackageDetailsScreen";
 import MyTripsScreen from "./src/screens/MyTripsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+// 👉 Your custom splash screen component
+import AppSplashScreen from "./src/screens/SplashScreen";
 
-// Import icons
+// Icons
 import { MessageCircle, Package, Luggage, Settings } from "lucide-react-native";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Prevent the splash screen from auto-hiding
-SplashScreen.preventAutoHideAsync();
+// Keep the native splash until fonts are ready
+ExpoSplash.preventAutoHideAsync().catch(() => {});
 
 function TabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let IconComponent;
-
-          if (route.name === "Chat") {
-            IconComponent = MessageCircle;
-          } else if (route.name === "Packages") {
-            IconComponent = Package;
-          } else if (route.name === "MyTrips") {
-            IconComponent = Luggage;
-          } else if (route.name === "Settings") {
-            IconComponent = Settings;
-          }
-
+        tabBarIcon: ({ color, size }) => {
+          let IconComponent = MessageCircle;
+          if (route.name === "Packages") IconComponent = Package;
+          if (route.name === "MyTrips") IconComponent = Luggage;
+          if (route.name === "Settings") IconComponent = Settings;
           return <IconComponent size={size} color={color} />;
         },
         tabBarActiveTintColor: "#7C3AED",
@@ -60,10 +55,7 @@ function TabNavigator() {
           paddingBottom: 5,
           height: 60,
         },
-        tabBarLabelStyle: {
-          fontFamily: "Urbanist_500Medium",
-          fontSize: 12,
-        },
+        tabBarLabelStyle: { fontFamily: "Urbanist_500Medium", fontSize: 12 },
         headerShown: false,
       })}
     >
@@ -87,47 +79,49 @@ export default function App() {
 
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded || fontError) {
-      await SplashScreen.hideAsync();
+      try {
+        await ExpoSplash.hideAsync();
+      } catch {}
     }
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider onLayout={onLayoutRootView}>
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {!hasCompletedOnboarding ? (
-            <Stack.Screen name="Onboarding">
-              {(props) => (
-                <OnboardingScreen
-                  {...props}
-                  setHasCompletedOnboarding={setHasCompletedOnboarding}
-                />
-              )}
-            </Stack.Screen>
-          ) : (
-            <>
-              <Stack.Screen name="Main" component={TabNavigator} />
-              <Stack.Screen
-                name="PackageDetails"
-                component={PackageDetailsScreen}
-                options={{
-                  headerShown: true,
-                  title: "Package Details",
-                  headerTintColor: "#F8FAFC",
-                  headerTitleStyle: {
-                    fontFamily: "Urbanist_600SemiBold",
-                  },
-                  headerStyle: {
-                    backgroundColor: "#0B1020",
-                  },
-                }}
+        <Stack.Navigator
+          initialRouteName="Splash" // 👉 Start at Splash
+          screenOptions={{ headerShown: false }}
+        >
+          {/* Splash -> waits 3s then navigation.replace('Onboarding') */}
+          <Stack.Screen name="Splash" component={AppSplashScreen} />
+
+          {/* Onboarding (passes setter so it can finish and go to Main) */}
+          <Stack.Screen name="Onboarding">
+            {(props) => (
+              <OnboardingScreen
+                {...props}
+                setHasCompletedOnboarding={setHasCompletedOnboarding}
               />
-            </>
-          )}
+            )}
+          </Stack.Screen>
+
+          {/* Main app (tabs) */}
+          <Stack.Screen name="Main" component={TabNavigator} />
+
+          {/* Details with header shown */}
+          <Stack.Screen
+            name="PackageDetails"
+            component={PackageDetailsScreen}
+            options={{
+              headerShown: true,
+              title: "Package Details",
+              headerTintColor: "#F8FAFC",
+              headerTitleStyle: { fontFamily: "Urbanist_600SemiBold" },
+              headerStyle: { backgroundColor: "#0B1020" },
+            }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
@@ -136,8 +130,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0B1020",
-  },
+  container: { flex: 1, backgroundColor: "#0B1020" },
 });

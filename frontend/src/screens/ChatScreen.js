@@ -1,4 +1,3 @@
-// src/screens/ChatScreen.js
 import React from "react";
 import {
   View,
@@ -10,6 +9,7 @@ import {
   Keyboard,
   InteractionManager,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Send } from "lucide-react-native";
 import MessageBubble from "../components/MessageBubble";
 import TagChip from "../components/TagChip";
@@ -24,40 +24,6 @@ const QUICK_CHIPS = [
   "4+ star hotels",
 ];
 
-// Create a fresh component without any hooks first
-function ChatScreen() {
-  return (
-    <View style={styles.container}>
-      <EmptyState
-        title="Tell me your vibe"
-        description="Try: 'SF → Doha, Nov 10–15, under $1500, pool + breakfast'"
-      />
-
-      <View style={styles.quickChips}>
-        {QUICK_CHIPS.map((chip, index) => (
-          <TagChip
-            key={index}
-            text={chip}
-            onPress={() => console.log("Chip pressed:", chip)}
-          />
-        ))}
-      </View>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Message TWOS..."
-          placeholderTextColor={COLORS.textMuted}
-        />
-        <TouchableOpacity style={styles.sendButton}>
-          <Send size={24} color={COLORS.primary} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-// Now let's gradually add state with proper React component syntax
 class ChatScreenClass extends React.Component {
   constructor(props) {
     super(props);
@@ -65,9 +31,19 @@ class ChatScreenClass extends React.Component {
       message: "",
       isTyping: false,
       messages: [],
+      phase: "idle", // 'idle' | 'awaiting_dates' | 'awaiting_addons' | 'done'
     };
     this.flatListRef = React.createRef();
   }
+
+  // smooth scroll to bottom
+  scrollToEndSmooth = () => {
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        this.flatListRef.current?.scrollToEnd({ animated: true });
+      });
+    });
+  };
 
   addMessage = (newMessage) => {
     const messageWithId = { ...newMessage, id: Date.now().toString() };
@@ -82,13 +58,78 @@ class ChatScreenClass extends React.Component {
     }));
   };
 
+  // tiny “NLU”
+  normalize = (s) =>
+    s
+      .toLowerCase()
+      .replace(/[–—]/g, "-") // normalize en/em dash
+      .replace(/\s+/g, " ")
+      .trim();
+
+  getBotReply = (raw) => {
+    const text = this.normalize(raw);
+    const { phase } = this.state;
+
+    // 1) Initial intent: SF -> Doha in November
+    const mentionsRoute =
+      text.includes("san francisco") && text.includes("doha");
+    const mentionsNov = text.includes("november");
+    if (mentionsRoute && mentionsNov) {
+      return {
+        nextPhase: "awaiting_dates",
+        reply: "Got it ✅ Can you confirm exact dates in November?",
+      };
+    }
+
+    // 2) Dates: “Nov 10–15” variants
+    const datesRegex = /(nov|november)\s*\d{1,2}\s*([-]|to)\s*\d{1,2}/i;
+    if (phase === "awaiting_dates" && datesRegex.test(text)) {
+      return {
+        nextPhase: "awaiting_addons",
+        reply:
+          "Perfect 👌 Budget $1500 noted. Do you also want a rental car or attractions included?",
+      };
+    }
+
+    // 3) Addons: car + desert safari
+    const wantsCar = /car|rental car|compact/i.test(text);
+    const wantsSafari = /desert safari|safari tour/i.test(text);
+    if (phase === "awaiting_addons" && wantsCar && wantsSafari) {
+      return {
+        nextPhase: "done",
+        reply:
+          "Perfect 👌 Here’s your package:\n" +
+          "Flight: Qatar Airways, Non-Stop, $980\n" +
+          "Hotel: Souq View ⭐4.4, breakfast + pool, $360\n" +
+          "Car: Hertz Compact, $92\n" +
+          "Desert Safari Tour: Included 🎟️\n" +
+          "Total: $1,432 (under budget 🎉)",
+        links: [
+          { label: "Flight Link – Expedia", url: "https://www.expedia.com/" },
+          {
+            label: "Hotel Link – Booking.com",
+            url: "https://www.booking.com/",
+          },
+          { label: "Car Link – Hertz", url: "https://www.hertz.com/" },
+          { label: "Tour Link – Tiqets", url: "https://www.tiqets.com/" },
+        ],
+      };
+    }
+
+    // 4) Fallback
+    return {
+      nextPhase: phase,
+      reply: "Hi there! 👋 I'm TWOS, your travel planning assistant.",
+    };
+  };
+
   handleSend = () => {
     const { message, isTyping } = this.state;
     if (!message.trim() || isTyping) return;
 
     Keyboard.dismiss();
 
-    // Add user message
+    // user bubble
     const userMessage = {
       role: "user",
       text: message,
@@ -96,74 +137,57 @@ class ChatScreenClass extends React.Component {
     };
     this.addMessage(userMessage);
 
-    // Clear input
+    // clear & typing
     this.setState({ message: "", isTyping: true });
 
-    // Simulate bot typing with delay
     setTimeout(() => {
-      // Add typing indicator
+      // typing indicator
       this.addMessage({
         role: "bot",
-        text: "Thinking...",
+        // text: "Thinking...",
         timestamp: new Date(),
         isTyping: true,
       });
 
-      // Final response after delay
       setTimeout(() => {
-        // Remove typing indicators
+        // remove typing
         this.removeTypingIndicators();
 
-        // Add final response
+        // scripted reply
+        const { reply, links, nextPhase } = this.getBotReply(userMessage.text);
+
         this.addMessage({
           role: "bot",
-          text: "Hi there! 👋 I'm TWOS, your travel planning assistant.",
+          text: reply,
+          links,
           timestamp: new Date(),
         });
 
-        this.setState({ isTyping: false });
+        this.setState({ isTyping: false, phase: nextPhase }, () =>
+          this.scrollToEndSmooth()
+        );
       }, 1500);
     }, 800);
   };
 
   handleQuickChip = (chipText) => {
     this.setState({ message: chipText }, () => {
-      setTimeout(() => {
-        this.handleSend();
-      }, 100);
+      setTimeout(() => this.handleSend(), 100);
     });
   };
-
-  // 2) helper to scroll smoothly after RN finishes laying out the new item
-  scrollToEndSmooth = () => {
-    // give layout a beat, then animate
-    InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        this.flatListRef.current?.scrollToEnd({ animated: true });
-      });
-    });
-  };
-
-  // 3) when messages change, glide to bottom
-  componentDidUpdate(prevProps, prevState) {
-    if (prevState.messages.length !== this.state.messages.length) {
-      this.scrollToEndSmooth();
-    }
-  }
 
   renderMessage = ({ item }) => {
     if (item.isTyping) {
-      return (
-        <View style={styles.typingContainer}>
-          <View style={styles.typingBubble}>
-            <Text style={styles.typingText}>{item.text}</Text>
-          </View>
-        </View>
-      );
+      return <MessageBubble role="bot" isTyping />;
     }
 
     return (
-      <MessageBubble role={item.role} text={item.text} time={item.timestamp} />
+      <MessageBubble
+        role={item.role}
+        text={item.text}
+        time={item.timestamp}
+        links={item.links}
+      />
     );
   };
 
@@ -171,84 +195,94 @@ class ChatScreenClass extends React.Component {
     const { messages, message, isTyping } = this.state;
 
     return (
-      <View style={styles.container}>
-        <FlatList
-          ref={this.flatListRef}
-          data={messages}
-          renderItem={this.renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.messagesContainer,
-            messages.length === 0 && styles.emptyContainer,
-          ]}
-          style={styles.messagesList}
-          showsVerticalScrollIndicator={true}
-          ListEmptyComponent={
-            <EmptyState
-              title="Tell me your vibe"
-              description="Try: 'SF → Doha, Nov 10–15, under $1500, pool + breakfast'"
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+        <View style={styles.container}>
+          {messages.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <EmptyState
+                title="Tell me your vibe"
+                description="Try: 'SF → Doha, Nov 10–15, under $1500, pool + breakfast'"
+              />
+            </View>
+          ) : (
+            <FlatList
+              ref={this.flatListRef}
+              data={messages}
+              renderItem={this.renderMessage}
+              keyExtractor={(item) => item.id}
+              style={styles.messagesList}
+              contentContainerStyle={styles.messagesContainer}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              onContentSizeChange={() => this.scrollToEndSmooth()}
             />
-          }
-          keyboardShouldPersistTaps="handled"
-          // This makes sure we also scroll when the first layout happens
-          onContentSizeChange={() => this.scrollToEndSmooth()}
-        />
+          )}
 
-        <View style={styles.quickChips}>
-          {QUICK_CHIPS.map((chip, index) => (
-            <TagChip
-              key={index}
-              text={chip}
-              onPress={() => this.handleQuickChip(chip)}
-            />
-          ))}
-        </View>
+          {/* Footer (chips + input) in bottom safe area */}
+          <SafeAreaView edges={["bottom"]} style={styles.footerSafe}>
+            <View style={styles.quickChips}>
+              {QUICK_CHIPS.map((chip, index) => (
+                <TagChip
+                  key={index}
+                  text={chip}
+                  onPress={() => this.handleQuickChip(chip)}
+                />
+              ))}
+            </View>
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={[styles.input, isTyping && styles.inputDisabled]}
-            value={message}
-            onChangeText={(text) => this.setState({ message: text })}
-            placeholder="Message TWOS..."
-            placeholderTextColor={COLORS.textMuted}
-            onSubmitEditing={this.handleSend}
-            editable={!isTyping}
-            multiline={true}
-            maxLength={500}
-          />
-          <TouchableOpacity
-            onPress={this.handleSend}
-            style={[styles.sendButton, isTyping && styles.sendButtonDisabled]}
-            disabled={isTyping}
-          >
-            <Send
-              size={24}
-              color={isTyping ? COLORS.textMuted : COLORS.primary}
-            />
-          </TouchableOpacity>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={[styles.input, isTyping && styles.inputDisabled]}
+                value={message}
+                onChangeText={(text) => this.setState({ message: text })}
+                placeholder="Message TWOS..."
+                placeholderTextColor={COLORS.textMuted}
+                onSubmitEditing={this.handleSend}
+                editable={!isTyping}
+                multiline
+                maxLength={500}
+              />
+              <TouchableOpacity
+                onPress={this.handleSend}
+                style={[
+                  styles.sendButton,
+                  isTyping && styles.sendButtonDisabled,
+                ]}
+                disabled={isTyping}
+              >
+                <Send
+                  size={24}
+                  color={isTyping ? COLORS.textMuted : COLORS.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  messagesList: {
-    flex: 1,
-  },
+  safe: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: COLORS.background },
+
+  messagesList: { flex: 1 },
   messagesContainer: {
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
     paddingBottom: SPACING.xxl,
   },
-  emptyContainer: {
+
+  emptyWrap: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.lg,
   },
+
+  footerSafe: { backgroundColor: COLORS.background },
+
   quickChips: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -258,11 +292,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.1)",
   },
+
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     padding: SPACING.md,
     backgroundColor: COLORS.background,
+    paddingBottom: 0,
+    marginBottom: -15,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.1)",
   },
@@ -279,22 +316,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     maxHeight: 100,
   },
-  inputDisabled: {
-    opacity: 0.5,
-  },
+  inputDisabled: { opacity: 0.5 },
   sendButton: {
     marginLeft: SPACING.sm,
     backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: 20,
     padding: SPACING.sm,
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
+  sendButtonDisabled: { opacity: 0.5 },
+
   typingContainer: {
     marginVertical: SPACING.xs,
     alignSelf: "flex-start",
     maxWidth: "80%",
+    paddingHorizontal: SPACING.md,
   },
   typingBubble: {
     padding: SPACING.md,
@@ -312,5 +347,4 @@ const styles = StyleSheet.create({
   },
 });
 
-// Export the class component instead of function component
 export default ChatScreenClass;
