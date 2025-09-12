@@ -1,7 +1,7 @@
 # -------------------------------------------------------------------
 # To test API endpoints
 # 1. Get you Gemini API key and copy to .env file
-# 2. pip3 install uvicorn fastapi python-dotenv google-generativeai
+# 2. pip3 install uvicorn fastapi python-dotenv requests
 # 3. python3 -m uvicorn ai_npu:app --reload
 # 4. Swagger UI: http://127.0.0.1:8000/docs
 # -------------------------------------------------------------------
@@ -10,24 +10,17 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List,Optional,Dict
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import json
 import traceback
-import google.generativeai as gemini
+import requests
+#import google.generativeai as gemini
 #import openai
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from auth import (
-    UserCreate, Token, UserInDB, fake_users_db, get_password_hash,
-    authenticate_user, create_access_token, create_refresh_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS,
-    get_current_active_user, get_user
-)
 
 load_dotenv()
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-gemini.configure(api_key=GEMINI_KEY)
+#gemini.configure(api_key=GEMINI_KEY)
 
 app = FastAPI (
         title = "TWOS AI NPU Testing",
@@ -121,12 +114,24 @@ def call_gemini(user_message: str) -> dict:
         "JSON Response:"
     )
 
+    API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "response_mime_type": "application/json",
+        }
+    }
+
     try:
-        AI_model = gemini.GenerativeModel("gemini-1.5-flash", generation_config={"response_mime_type":"application/json"})
-        response = AI_model.generate_content(prompt)
+        # AI_model = gemini.GenerativeModel("gemini-1.5-flash", generation_config={"response_mime_type":"application/json"})
+        # response = AI_model.generate_content(prompt)
+        response = requests.post(API_URL, headers=headers, json=payload)
+        response.raise_for_status()
 
-        raw_json_string = response.text
-
+        raw_json_string = response.json()['candidates'][0]['content']['parts'][0]['text']
         return json.loads(raw_json_string)
     
 
@@ -144,121 +149,6 @@ def call_gemini(user_message: str) -> dict:
 # Endponts
 #----------
 
-@app.post("/register", response_model=UserInDB)
-async def register(user: UserCreate):
-    if user.email in fake_users_db:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    hashed_password = get_password_hash(user.password)
-    db_user = UserInDB(
-        email=user.email,
-        hashed_password=hashed_password,
-        full_name=user.full_name
-    )
-    fake_users_db[user.email] = db_user
-    return db_user
-
-@app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
-    refresh_token = create_refresh_token(
-        data={"sub": user.email}, expires_delta=refresh_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "refresh_token": refresh_token
-    }
-
-@app.post("/token/refresh", response_model=Token)
-async def refresh_token(refresh_token: str):
-    try:
-        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=400, detail="Invalid token type")
-        
-        email = payload.get("sub")
-        if email is None:
-            raise HTTPException(status_code=400, detail="Invalid token")
-            
-        user = get_user(fake_users_db, email)
-        if user is None:
-            raise HTTPException(status_code=400, detail="User not found")
-            
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        new_access_token = create_access_token(
-            data={"sub": user.email}, expires_delta=access_token_expires
-        )
-        
-        return {
-            "access_token": new_access_token,
-            "token_type": "bearer",
-            "refresh_token": refresh_token
-        }
-        
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid token")
-
-@app.post("/password/reset-request")
-async def request_password_reset(email: str):
-    # In a real application, you would send an email with a reset token
-    # This is a simplified version that just returns a reset token
-    user = get_user(fake_users_db, email)
-    if user is None:
-        # Don't reveal that the user doesn't exist
-        return {"message": "If your email is registered, you'll receive a password reset link"}
-        
-    reset_token = create_access_token(
-        data={"sub": user.email, "purpose": "reset"},
-        expires_delta=timedelta(hours=1)
-    )
-    
-    # In a real app, send an email with the reset token
-    return {"message": "If your email is registered, you'll receive a password reset link"}
-
-@app.post("/password/reset")
-async def reset_password(token: str, new_password: str):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        if payload.get("purpose") != "reset":
-            raise HTTPException(status_code=400, detail="Invalid token")
-            
-        email = payload.get("sub")
-        if email is None:
-            raise HTTPException(status_code=400, detail="Invalid token")
-            
-        user = get_user(fake_users_db, email)
-        if user is None:
-            raise HTTPException(status_code=400, detail="User not found")
-            
-        # Update the user's password
-        hashed_password = get_password_hash(new_password)
-        user.hashed_password = hashed_password
-        fake_users_db[email] = user
-        
-        return {"message": "Password updated successfully"}
-        
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
-
-@app.get("/me")
-async def read_users_me(current_user: UserInDB = Depends(get_current_active_user)):
-    return current_user
-
 @app.get("/")
 def root():
     return {"message": "Welcome to the TWOS!"}
@@ -270,10 +160,7 @@ def health():
 
 # Parse the user's request (natural language text)
 @app.post("/nlu/parse", response_model = ParseResponse)
-async def parse(
-    request: Request,
-    current_user: UserInDB = Depends(get_current_active_user)
-):
+def parse(request: Request):
     result = call_gemini(request.message)
     
     slots_dict = result.get("slots", {})
@@ -289,10 +176,7 @@ async def parse(
     return ParseResponse(slots=slots, missing=missing, confidence=confidence)
 
 @app.post("/nlu/clarify", response_model=ClarifyResponse)
-async def clarify(
-    request: ClarifyRequest,
-    current_user: UserInDB = Depends(get_current_active_user)
-):
+def clarify(request: ClarifyRequest):
 
     #If there is no missing information
     if not request.missing:
