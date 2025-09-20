@@ -1,0 +1,119 @@
+Table users {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  email varchar(255) [unique, not null]
+  hashed_password varchar(255) [not null]
+  first_name varchar(100)
+  last_name varchar(100)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table user_preferences {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  user_id uuid [not null, ref: > users.id]
+  preference_type varchar(50) [not null]
+  value jsonb [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (user_id, preference_type) [unique]
+  }
+}
+
+Table trips {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  user_id uuid [not null, ref: > users.id]
+  origin_code varchar(3) [not null]
+  origin_name varchar(255) [not null]
+  destination_code varchar(3) [not null]
+  destination_name varchar(255) [not null]
+  start_date date [not null]
+  end_date date [not null]
+  adults int [default: 1]
+  budget decimal(10,2)
+  status varchar(20) [default: 'draft']
+  share_code varchar(10) [unique]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table packages {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  trip_id uuid [not null, ref: > trips.id]
+  total_price decimal(10,2) [not null]
+  score decimal(5,2)
+  explanation text
+  flight_data jsonb
+  hotel_data jsonb
+  car_data jsonb
+  attractions_data jsonb
+  deeplinks jsonb [not null, default: `'{}'`]
+}
+
+Table trip_components {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  trip_id uuid [not null, ref: > trips.id]
+  package_id uuid [not null, ref: > packages.id]
+  type varchar(20) [not null] // 'flight', 'hotel', 'car', 'attraction'
+  details jsonb [not null]
+  status varchar(20) [default: 'pending']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table booking_references {
+  id uuid [pk, default: `uuid_generate_v4()`]
+  user_id uuid [not null, ref: > users.id]
+  trip_component_id uuid [not null, ref: > trip_components.id]
+  provider varchar(50) [not null]
+  reference_code varchar(255) [not null]
+  status varchar(50)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+//// Relationships
+// Ref: user_preferences.user_id > users.id
+// Ref: trips.user_id > users.id
+// Ref: packages.trip_id > trips.id
+// Ref: trip_components.trip_id > trips.id
+// Ref: trip_components.package_id > packages.id
+// Ref: booking_references.user_id > users.id
+// Ref: booking_references.trip_component_id > trip_components.id
+
+//// Grouping for clarity
+// Group "User Management" {
+//   users
+//   user_preferences
+// }
+
+// Group "Trip Planning" {
+//   trips
+//   packages
+//   trip_components
+// }
+
+// Group "Bookings" {
+//   booking_references
+// }
+
+//// Notes
+// Note: users {
+//   This table stores all registered users and their credentials.
+// }
+
+// Note: trips {
+//   A trip is the main container requested by a user (origin, destination, dates, etc.).
+// }
+
+// Note: packages {
+//   AI-generated package options for a trip, including flights, hotels, and more.
+// }
+
+// Note: trip_components {
+//   The FINAL selected components from a chosen package.
+// }
+
+// Note: booking_references {
+//   Future feature to track external provider confirmations (e.g., Expedia).
+// }
+
