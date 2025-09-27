@@ -1,0 +1,150 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:13-alpine
+    container_name: ai_travel_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-twos_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/assets/ai_travel_companion.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ai_travel_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-twos_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_travel_backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-twos_db}
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-your-super-secret-key-change-in-production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-jwt-secret-key}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      
+      # Server
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+      DEBUG: ${DEBUG:-false}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      WORKERS: ${WORKERS:-4}
+      
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,http://localhost:19006}
+      
+      # External APIs
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      WEATHER_API_KEY: ${WEATHER_API_KEY}
+      
+      # Email (optional)
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL}
+      EMAILS_FROM_NAME: ${EMAILS_FROM_NAME:-AI Travel Companion}
+      
+      # File Upload
+      UPLOAD_FOLDER: uploads
+      MAX_CONTENT_LENGTH: ${MAX_CONTENT_LENGTH:-16777216}
+      
+      # Rate Limiting
+      RATE_LIMIT: ${RATE_LIMIT:-100/minute}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FILE: logs/app.log
+      
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ai_travel_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # AI Service (Optional - for separate AI processing)
+  ai_service:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile.ai
+    container_name: ai_travel_ai
+    ports:
+      - "8001:8001"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    networks:
+      - ai_travel_network
+    profiles:
+      - ai-service
+    restart: unless-stopped
+
+  # Redis for caching (Optional)
+  redis:
+    image: redis:7-alpine
+    container_name: ai_travel_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai_travel_network
+    profiles:
+      - cache
+    restart: unless-stopped
+
+  # Nginx reverse proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: ai_travel_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+    networks:
+      - ai_travel_network
+    profiles:
+      - proxy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  ai_travel_network:
+    driver: bridge

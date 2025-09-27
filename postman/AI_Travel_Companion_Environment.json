@@ -1,0 +1,91 @@
+{
+  "id": "ai-travel-companion-env",
+  "name": "AI Travel Companion - Local",
+  "values": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "description": "Base URL for the API server",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "api_version",
+      "value": "/api/v1",
+      "description": "API version prefix",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "full_url",
+      "value": "{{base_url}}{{api_version}}",
+      "description": "Complete API URL",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "description": "JWT Access Token (auto-populated)",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "description": "JWT Refresh Token (auto-populated)",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "description": "Current user ID (auto-populated)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_email",
+      "value": "testuser@example.com",
+      "description": "Test user email",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_password",
+      "value": "testpass123",
+      "description": "Test user password",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_first_name",
+      "value": "John",
+      "description": "Test user first name",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_last_name",
+      "value": "Doe",
+      "description": "Test user last name",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "trip_id",
+      "value": "",
+      "description": "Current trip ID (auto-populated)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "package_id",
+      "value": "",
+      "description": "Current package ID (auto-populated)",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

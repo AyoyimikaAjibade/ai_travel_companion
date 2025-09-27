@@ -1,0 +1,508 @@
+{
+  "info": {
+    "name": "AI Travel Companion API",
+    "description": "Complete API collection for AI Travel Companion with automatic token handling",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-refresh token if expired",
+          "const accessToken = pm.environment.get('access_token');",
+          "const refreshToken = pm.environment.get('refresh_token');",
+          "",
+          "if (accessToken && refreshToken) {",
+          "    // Check if token is expired (simple check)",
+          "    try {",
+          "        const tokenData = JSON.parse(atob(accessToken.split('.')[1]));",
+          "        const currentTime = Math.floor(Date.now() / 1000);",
+          "        ",
+          "        if (tokenData.exp < currentTime + 300) { // Refresh if expires in 5 minutes",
+          "            console.log('Token expiring soon, refreshing...');",
+          "            ",
+          "            pm.sendRequest({",
+          "                url: pm.environment.get('full_url') + '/auth/refresh',",
+          "                method: 'POST',",
+          "                header: {",
+          "                    'Content-Type': 'application/json'",
+          "                },",
+          "                body: {",
+          "                    mode: 'raw',",
+          "                    raw: JSON.stringify({",
+          "                        refresh_token: refreshToken",
+          "                    })",
+          "                }",
+          "            }, function (err, response) {",
+          "                if (!err && response.code === 200) {",
+          "                    const responseData = response.json();",
+          "                    pm.environment.set('access_token', responseData.access_token);",
+          "                    pm.environment.set('refresh_token', responseData.refresh_token);",
+          "                    console.log('Token refreshed successfully');",
+          "                }",
+          "            });",
+          "        }",
+          "    } catch (e) {",
+          "        console.log('Error checking token expiration:', e);",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/health",
+              "host": ["{{full_url}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Registration successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    pm.environment.set('user_id', responseData.id);",
+                  "    console.log('User registered successfully with ID:', responseData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\",\n  \"first_name\": \"{{test_first_name}}\",\n  \"last_name\": \"{{test_last_name}}\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/auth/register",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    pm.environment.set('access_token', responseData.access_token);",
+                  "    pm.environment.set('refresh_token', responseData.refresh_token);",
+                  "    console.log('Login successful, tokens saved');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{test_email}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{test_password}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{full_url}}/auth/login",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Token refresh successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    pm.environment.set('access_token', responseData.access_token);",
+                  "    pm.environment.set('refresh_token', responseData.refresh_token);",
+                  "    console.log('Tokens refreshed successfully');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/auth/refresh",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 User Management",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/users/me",
+              "host": ["{{full_url}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Update Current User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Updated\",\n  \"last_name\": \"Name\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/users/me",
+              "host": ["{{full_url}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{test_password}}\",\n  \"new_password\": \"newpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/users/change-password",
+              "host": ["{{full_url}}"],
+              "path": ["users", "change-password"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "✈️ Trip Management",
+      "item": [
+        {
+          "name": "Create Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const responseData = pm.response.json();",
+                  "    pm.environment.set('trip_id', responseData.id);",
+                  "    console.log('Trip created with ID:', responseData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"origin_code\": \"NYC\",\n  \"origin_name\": \"New York City\",\n  \"destination_code\": \"LAX\",\n  \"destination_name\": \"Los Angeles\",\n  \"start_date\": \"2024-06-01\",\n  \"end_date\": \"2024-06-07\",\n  \"adults\": 2,\n  \"budget\": 2000.00\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/trips",
+              "host": ["{{full_url}}"],
+              "path": ["trips"]
+            }
+          }
+        },
+        {
+          "name": "Get My Trips",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/trips",
+              "host": ["{{full_url}}"],
+              "path": ["trips"]
+            }
+          }
+        },
+        {
+          "name": "Get Trip by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/trips/{{trip_id}}",
+              "host": ["{{full_url}}"],
+              "path": ["trips", "{{trip_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Trip",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"budget\": 2500.00,\n  \"status\": \"planning\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/trips/{{trip_id}}",
+              "host": ["{{full_url}}"],
+              "path": ["trips", "{{trip_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Trip",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/trips/{{trip_id}}",
+              "host": ["{{full_url}}"],
+              "path": ["trips", "{{trip_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📦 Package Management",
+      "item": [
+        {
+          "name": "Get Packages for Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    if (responseData.length > 0) {",
+                  "        pm.environment.set('package_id', responseData[0].id);",
+                  "        console.log('Package ID saved:', responseData[0].id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/packages?trip_id={{trip_id}}",
+              "host": ["{{full_url}}"],
+              "path": ["packages"],
+              "query": [
+                {
+                  "key": "trip_id",
+                  "value": "{{trip_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Package",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const responseData = pm.response.json();",
+                  "    pm.environment.set('package_id', responseData.id);",
+                  "    console.log('Package created with ID:', responseData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip_id\": \"{{trip_id}}\",\n  \"total_price\": 1899.99,\n  \"score\": 8.5,\n  \"explanation\": \"Great package with flights and hotel\",\n  \"flight_data\": {\n    \"airline\": \"American Airlines\",\n    \"departure\": \"2024-06-01T08:00:00Z\",\n    \"arrival\": \"2024-06-01T11:00:00Z\"\n  },\n  \"hotel_data\": {\n    \"name\": \"Grand Hotel\",\n    \"rating\": 4.5,\n    \"location\": \"Downtown LA\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/packages",
+              "host": ["{{full_url}}"],
+              "path": ["packages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔧 Components",
+      "item": [
+        {
+          "name": "Get Components for Trip",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/components?trip_id={{trip_id}}",
+              "host": ["{{full_url}}"],
+              "path": ["components"],
+              "query": [
+                {
+                  "key": "trip_id",
+                  "value": "{{trip_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Bookings",
+      "item": [
+        {
+          "name": "Get My Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/bookings",
+              "host": ["{{full_url}}"],
+              "path": ["bookings"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
