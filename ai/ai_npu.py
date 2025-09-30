@@ -2,7 +2,7 @@
 # To test API endpoints
 # 1. Get you Gemini API key and copy to .env file
 # 2. pip3 install uvicorn fastapi python-dotenv requests
-# 3. python3 -m uvicorn ai_npu:app --reload
+# 3. python3 -m uvicorn ai_npu:app --reload --host 0.0.0.0
 # 4. Swagger UI: http://127.0.0.1:8000/docs
 # -------------------------------------------------------------------
 
@@ -41,12 +41,16 @@ class Dates(BaseModel):
 class HotelPreferences(BaseModel):
     amenities: List[str] = []
 
+# Number of travelers / based on the frontend
+class Pax(BaseModel):
+    adults: Optional[int] = None
+
 # Slots to track
 class Slots(BaseModel):
     origin: Optional[str] = None
     destination: Optional[str] = None
     dates: Dates = Dates()
-    pax: Optional[int] = None   #Number of travelers
+    pax: Pax = Pax()    #Number of travelers
     budget: Optional[float] = None
     hotel: HotelPreferences = HotelPreferences()
     car: Optional[bool] = None
@@ -87,7 +91,7 @@ def call_gemini(user_message: str) -> dict:
                     "origin": "SFO",
                     "destination": "DOH",
                     "dates": {"start": "2025-11-10", "end":"2025-11-20"},
-                    "pax": 1,
+                    "pax": {"adults": 1},
                     "budget": 1500,
                     "hotel": {"amenities": ["breakfast", "pool"]},
                     "car" : False
