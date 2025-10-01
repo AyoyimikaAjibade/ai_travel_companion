@@ -122,11 +122,12 @@ Before setting up the project, ensure you have the following installed:
 
 4. **Set up PostgreSQL database**
    ```bash
-   # Create database
-   createdb twos_db
-   
-   # Or using PostgreSQL command line
-   psql -c "CREATE DATABASE twos_db;"
+   # Connect to Postgres (from your host, if you have psql installed)
+   psql -U <username>
+
+   # Then in the psql prompt:
+   CREATE DATABASE twos_db;
+   \q
    ```
 
 5. **Configure environment variables**
@@ -178,7 +179,7 @@ Before setting up the project, ensure you have the following installed:
 
 2. **Install dependencies**
    ```bash
-   npm install
+npm install
    ```
 
 3. **Configure API endpoint**
