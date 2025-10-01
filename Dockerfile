@@ -8,11 +8,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends\
     gcc \
     libpq-dev \
     musl-dev \
     libffi-dev \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    cargo \
+    rustc \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -22,6 +27,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python dependencies
+RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source code

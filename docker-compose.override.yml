@@ -23,7 +23,6 @@ services:
     # Add development database initialization
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/assets/ai_travel_companion.sql:/docker-entrypoint-initdb.d/init.sql:ro
       # Mount local SQL scripts for development
       - ./backend/scripts:/docker-entrypoint-initdb.d/scripts:ro
 

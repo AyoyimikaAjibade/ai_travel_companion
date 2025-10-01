@@ -23,7 +23,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -32,7 +32,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     """Generate a password hash."""
-    # bcrypt only supports up to 72 bytes
     return pwd_context.hash(password)
 
 def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:

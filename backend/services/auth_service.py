@@ -14,10 +14,9 @@ from core.security import (
     verify_password, 
     get_password_hash, 
     create_access_token, 
-    create_refresh_token
+    create_refresh_token,
 )
 from core.config import settings
-
 
 class AuthService(BaseService[User]):
     """Service for authentication operations."""
