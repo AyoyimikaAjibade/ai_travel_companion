@@ -1,85 +1,37 @@
 # -------------------------------------------------------------------
 # To test API endpoints
 # 1. Get you Gemini API key and copy to .env file
-# 2. pip3 install uvicorn fastapi python-dotenv requests
-# 3. python3 -m uvicorn ai_npu:app --reload --host 0.0.0.0
-# 4. Swagger UI: http://127.0.0.1:8000/docs
+# 2. python3 -m venv venv
+# 3. source venv/bin/activate
+# 4. pip3 install uvicorn fastapi python-dotenv requests
+# 5. python3 -m uvicorn ai_npu:app --reload --host 0.0.0.0
+# 6. Swagger UI: http://127.0.0.1:8000/docs
+# 7. deactivate (to close venv)
 # -------------------------------------------------------------------
 
 from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List,Optional,Dict
 from dotenv import load_dotenv
 from datetime import datetime
+from api_services import amadeus_search_flights,amadeus_search_hotels
+from base_models import (
+    Request,ParseResponse, ClarifyRequest, ClarifyResponse,
+    TravelOptionsResponse,Slots,FlightOption,HotelOption
+)
 import os
 import json
 import traceback
 import requests
-#import google.generativeai as gemini
-#import openai
 
 load_dotenv()
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 #gemini.configure(api_key=GEMINI_KEY)
+print(f"✅ Loaded Gemini Key: {'Yes' if GEMINI_KEY else 'No'}")
 
 app = FastAPI (
-        title = "TWOS AI NPU Testing",
+        title = "TWOS AI NLP Testing",
         description="AI-powered Travel planner",
         version="1.0.0"
     )
-
-#-------------------
-# BaseModel classes
-#-------------------
-
-# Travel Dates
-class Dates(BaseModel):
-    start: Optional[str] = None
-    end: Optional[str] = None
-
-# Features/Amenities of hotels. For example, free-WIFI, Breakfast, Pool, etc.
-class HotelPreferences(BaseModel):
-    amenities: List[str] = []
-
-# Number of travelers / based on the frontend
-class Pax(BaseModel):
-    adults: Optional[int] = None
-
-# Slots to track
-class Slots(BaseModel):
-    origin: Optional[str] = None
-    destination: Optional[str] = None
-    dates: Dates = Dates()
-    pax: Pax = Pax()    #Number of travelers
-    budget: Optional[float] = None
-    hotel: HotelPreferences = HotelPreferences()
-    car: Optional[bool] = None
-
-# User's text(natural language). For example, “SF to Doha Nov 10–15…”
-class Request(BaseModel):
-    message : str           # {"message": “SF to Doha Nov 10–15…” }
-
-# Body for response from AI model
-class ParseResponse(BaseModel):
-    slots : Slots
-    missing: List[str]              # list of slots that were not filled yet
-    confidence: Dict[str,float] = {}
-
-# nlu/clarify endpoint body
-class ClarifyRequest(BaseModel):
-    missing: List[str]
-    received: Optional[Slots] = None
-    
-# nlu/clarify enpoints response body | Relies from backend to frontend(user UI)
-class ClarifyResponse(BaseModel):
-    question: str
-    options: Optional[List[str]] = None
-
-# /preference/update endpoint body
-class PreferenceUpdate(BaseModel):
-    userID : str
-    signal : str
-    data: Dict[str, object] = {}
 
 # -------------------------------------
 # AI - Gemini to Parse User's request
@@ -88,18 +40,20 @@ def call_gemini(user_message: str) -> dict:
         
     schema_body = {
             "slots": {
-                    "origin": "SFO",
-                    "destination": "DOH",
+                    "origin_airport_code": "SFO",
+                    "destination_airport_code": "LHR",
+                    "destination_city_code":"LON",
                     "dates": {"start": "2025-11-10", "end":"2025-11-20"},
-                    "pax": {"adults": 1},
+                    "pax": {"adults": 1, "kids": 1},
                     "budget": 1500,
                     "hotel": {"amenities": ["breakfast", "pool"]},
                     "car" : False
                     },
             "missing": ["car"],
             "confidence": {
-                    "origin": 0.9,
-                    "destination": 0.9,
+                    "origin_airport_code": 0.9,
+                    "destination_airport_code": 0.9,
+                    "destination_city_code":0.9,
                     "dates": 0.9,
                     "pax": 0.9,
                     "budget": 0.9,
@@ -110,41 +64,118 @@ def call_gemini(user_message: str) -> dict:
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     prompt = (
-        f"You are a helpful travel assistant. Your task is to extract travel information from the user's message. "
-        f"The current date is {current_date}. Respond ONLY with valid JSON that matches this schema.\n"
-        "Do NOT add any extra text, markdown, or code fences.\n\n"
-        f"Schema example:\n{json.dumps(schema_body, indent=2)}\n\n"
-        f'User message: "{user_message}"\n\n'
+        "You are a travel-NLU extractor. Extract slots and return ONLY valid JSON.\n"
+        "\n"
+        "OUTPUT CONTRACT (strict):\n"
+        "- Respond with exactly ONE JSON object.\n"
+        "- Keys allowed at the top level: {\"slots\", \"missing\", \"confidence\"}.\n"
+        "- In slots, only these keys: {\"origin_airport_code\",\"destination_airport_code\",\"destination_city_code\",\"dates\",\"pax\",\"budget\",\"hotel\",\"car\"}.\n"
+        "- Do NOT output null anywhere. If you cannot fill a value, OMIT that field and list its name in `missing`.\n"
+        "- Confidence: provide 0.0–1.0 only for fields you filled.\n"
+        "\n"
+        "FILLING RULES:\n"
+        "1) Airports must be IATA airport codes (e.g., SFO, JFK). Hotels/city use IATA city codes (e.g., PAR, NYC, LON, SEL).\n"
+        "2) Common mappings:\n"
+        "   • \"SF\" / \"San Fran\" / \"San Francisco\" → origin_airport_code=SFO (unless clearly destination)\n"
+        "   • \"Seoul\" → destination_airport_code=ICN, destination_city_code=SEL\n"
+        "   • \"Paris\" → destination_airport_code=CDG (default), destination_city_code=PAR\n"
+        "3) pax:\n"
+        "   • pax.adults = number of adults explicitly mentioned.\n"
+        "   • pax.kids = number of children explicitly mentioned (\"kids\", \"children\"). If none mentioned, set pax.kids=0.\n"
+        "4) car/hotel:\n"
+        "   • If message mentions a rental car, set car=true.\n"
+        "   • If user says they DON'T need a hotel, set hotel.amenities=[ ] and do NOT add hotel to `missing`.\n"
+        "5) budget: parse numbers with symbols/abbreviations (\"$5k\" → 5000). Assume USD.\n"
+        "6) dates: output ISO YYYY-MM-DD. Parse ranges like \"Nov 10 to Nov 25\".\n"
+        "7) Inference & missing:\n"
+        "   • Fill only when unambiguous; otherwise omit and add the field name to `missing`.\n"
+        "   • Do NOT invent values.\n"
+        "\n"
+        f"The current date is {current_date}.\\n\\n"
+        "Schema shape example (values are illustrative only):\n"
+        f"{json.dumps(schema_body, indent=2)}\\n\\n"
+        "Few-shot examples (format to mimic):\n"
+        "Example A:\n"
+        "User: \"I want to fly from San Francisco to Paris for 2 adults from Nov 10 to Nov 20 and I need a 4 or 5 star hotel\"\n"
+        "JSON:\n"
+        "{\n"
+        "  \"slots\": {\n"
+        "    \"origin_airport_code\": \"SFO\",\n"
+        "    \"destination_airport_code\": \"CDG\",\n"
+        "    \"destination_city_code\": \"PAR\",\n"
+        "    \"dates\": {\"start\":\"2025-11-10\",\"end\":\"2025-11-20\"},\n"
+        "    \"pax\": {\"adults\":2, \"kids\":0},\n"
+        "    \"hotel\": {\"amenities\": []}\n"
+        "  },\n"
+        "  \"missing\": [],\n"
+        "  \"confidence\": {\"origin_airport_code\":0.9,\"destination_airport_code\":0.9,\"destination_city_code\":0.9,\"dates\":0.9,\"pax\":0.9,\"hotel\":0.9}\n"
+        "}\n"
+        "\n"
+        "Example B:\n"
+        "User: \"I am planning a family trip from SF to Seoul. There are 4 people, 2 adults and 2 kids. From Nov 10 to Nov 25. I need a rental car during the trip. I don't need a hotel. My budget is $5k.\"\n"
+        "JSON:\n"
+        "{\n"
+        "  \"slots\": {\n"
+        "    \"origin_airport_code\": \"SFO\",\n"
+        "    \"destination_airport_code\": \"ICN\",\n"
+        "    \"destination_city_code\": \"SEL\",\n"
+        "    \"dates\": {\"start\":\"2025-11-10\",\"end\":\"2025-11-25\"},\n"
+        "    \"pax\": {\"adults\":2, \"kids\":2},\n"
+        "    \"budget\": 5000,\n"
+        "    \"hotel\": {\"amenities\": []},\n"
+        "    \"car\": true\n"
+        "  },\n"
+        "  \"missing\": [],\n"
+        "  \"confidence\": {\"origin_airport_code\":0.9,\"destination_airport_code\":0.9,\"destination_city_code\":0.9,\"dates\":0.9,\"pax\":0.9,\"budget\":0.9,\"car\":0.9}\n"
+        "}\n"
+        "\n"
+        f"User message: \\\"{user_message}\\\"\\n\\n"
         "JSON Response:"
     )
 
-    API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-    headers = {'Content-Type': 'application/json'}
+
+    GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+    headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+    }
+
     payload = {
         "contents": [{
             "parts": [{"text": prompt}]
         }],
         "generationConfig": {
             "response_mime_type": "application/json",
+            "temperature":0
         }
     }
 
     try:
+
+        assert isinstance(headers, dict), f"headers is {type(headers)} (should be dict)"
+        
         # AI_model = gemini.GenerativeModel("gemini-1.5-flash", generation_config={"response_mime_type":"application/json"})
         # response = AI_model.generate_content(prompt)
-        response = requests.post(API_URL, headers=headers, json=payload)
+        response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
         response.raise_for_status()
 
         raw_json_string = response.json()['candidates'][0]['content']['parts'][0]['text']
+        print("--- 🔴 Gemini Raw Output 🔴 ---")
+        print(response.text)
         return json.loads(raw_json_string)
     
 
-
     except Exception as e:
-        print(f"--- GEMINI PARSE ERROR ---")
-        traceback.print_exc()
-        print(f"--------------------------")
+        print("\n--- 🔴 GEMINI PARSE ERROR 🔴 ---")
+        
+        if 'response' in locals() and hasattr(response,'text'):
+            print("--- RAW API RESPONSE FROM GOOGLE ---")
+            print(response.text)
+            print("------------------------------------")
        
+        traceback.print_exc()
+        print("------------------------------------")
+        
         # Return an empty structure on failure
         return {"slots": {}, "missing": [], "confidence": {}}
 
@@ -187,8 +218,10 @@ def clarify(request: ClarifyRequest):
         return ClarifyResponse(question="Anything else to add?")
     
     missing_info_map = {
-        "origin": "Where are you flying from?",
-        "destination": "Where are you going>",
+        "origin_airport_code": "Where are you flying from?",
+        "destination_airport_code": "Where are you going?",
+        "destination_city_code": "What city are you staying in? (e.g., London)",
+        
         "dates": "What dates are you planning to travel?",
         "pax": "How many people are going to travel?",
         "budget": "What's your total travel budget(USD?)",
@@ -198,6 +231,18 @@ def clarify(request: ClarifyRequest):
     
     missing_info = request.missing[0]
     return ClarifyResponse(question=missing_info_map.get(missing_info, f"Could you provide {missing_info}?"))
+
+@app.post("/search", response_model=TravelOptionsResponse)
+def search_options(slots:Slots):
+    print("Received slots for search: ", slots.model_dump())
+
+    flight_results = amadeus_search_flights(slots)
+    hotel_results = amadeus_search_hotels(slots)
+
+    return TravelOptionsResponse(
+        flights=[FlightOption(**flight) for flight in flight_results],
+        hotels=[HotelOption(**hotel) for hotel in hotel_results],
+    )
 
 """
 @app.post("/preference/update")
