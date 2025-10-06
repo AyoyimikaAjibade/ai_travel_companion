@@ -5,30 +5,26 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Linking,
+  // Linking, // not needed now that we navigate internally
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import LottieView from "lottie-react-native";
 import { format } from "date-fns";
 import GradientBackground from "./GradientBackground";
 import { COLORS, GRADIENTS, BORDER_RADIUS, SPACING } from "../theme";
 
 // 1) Static import so Metro bundles it
-//    Make sure the file exists at: assets/lottie/loader-plane.json
 let LoaderPlane;
 try {
   LoaderPlane = require("../../assets/lottie/loader-plane.json");
 } catch (e) {
-  // optional: log in dev
   if (__DEV__) console.warn("Lottie plane JSON not found:", e?.message);
 }
 
-// 2) Dev fallback (use a bundled sample if your file path is wrong while testing)
-//    If this path fails in your setup, just comment it out.
+// 2) Dev fallback (optional)
 let DevFallback;
 try {
-  // NOTE: path may vary across versions; comment this out if it errors.
-  // console.log("DevFallback");
-
+  // Comment this if it errors in your setup
   DevFallback = require("lottie-react-native/src/js/animations/Watermelon.json");
 } catch {
   /* ignore */
@@ -42,17 +38,13 @@ const TypingBubble = () => {
     try {
       if (lottieRef.current) {
         lottieRef.current.reset?.();
-        setTimeout(() => {
-          lottieRef.current?.play?.();
-        }, 10);
+        setTimeout(() => lottieRef.current?.play?.(), 10);
       }
     } catch {}
   }, []);
 
   React.useEffect(() => {
-    const id = setTimeout(() => {
-      resetAndPlay();
-    }, 0);
+    const id = setTimeout(resetAndPlay, 0);
     return () => clearTimeout(id);
   }, [resetAndPlay]);
 
@@ -84,7 +76,17 @@ const TypingBubble = () => {
   );
 };
 
-const MessageBubble = ({ role, text, time, isTyping, links }) => {
+const MessageBubble = ({
+  role,
+  text,
+  time,
+  isTyping,
+  links,
+  navigation: navigationProp, // may be passed from parent
+}) => {
+  const navFromHook = useNavigation();
+  const navigation = navigationProp ?? navFromHook; // fallback to hook
+
   const isUser = role === "user";
 
   if (isTyping) {
@@ -117,8 +119,14 @@ const MessageBubble = ({ role, text, time, isTyping, links }) => {
                 <TouchableOpacity
                   key={idx}
                   style={styles.linkBtn}
-                  onPress={() => Linking.openURL(l.url)}
                   activeOpacity={0.85}
+                  onPress={() =>
+                    navigation?.navigate("ProviderPreview", {
+                      provider: l.provider,
+                      type: l.type || "flight",
+                      data: l.payload || {},
+                    })
+                  }
                 >
                   <Text style={styles.linkText}>🔗 {l.label}</Text>
                 </TouchableOpacity>
@@ -170,21 +178,18 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.12)",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 64, // ensure visible height
+    minHeight: 64,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
 
-  // Big enough that you will see it for sure
   lottie: {
     width: 180,
     height: 52,
-    // debug background so you know the view is present while testing; remove later
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: "rgba(255,255,255,0.03)", // debug bg; remove if you want
     borderRadius: 12,
   },
 
-  // Visible fallback if Lottie source can’t be loaded
   lottieFallback: {
     width: 60,
     height: 28,

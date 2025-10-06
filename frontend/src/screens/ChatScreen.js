@@ -1,7 +1,7 @@
+// src/screens/ChatScreen.js
 import React from "react";
 import {
   View,
-  Text,
   TextInput,
   FlatList,
   TouchableOpacity,
@@ -24,6 +24,57 @@ const QUICK_CHIPS = [
   "4+ star hotels",
 ];
 
+// ---- helpers ----
+const formatCurrency = (amount, currency = "USD") => {
+  const symbol = currency === "USD" ? "$" : `${currency} `;
+  if (typeof amount === "number") return symbol + amount.toLocaleString();
+  return symbol + amount;
+};
+
+// Example backend-like package we’ll inject when flow reaches “done”
+const SAMPLE_PACKAGE = {
+  package: {
+    flight: {
+      airline: "Qatar Airways",
+      type: "Non-Stop",
+      price: 980,
+      currency: "USD",
+      link: {
+        url: "https://www.expedia.com/qatar-flight",
+        provider: "Expedia",
+      },
+    },
+    hotel: {
+      name: "Souq View",
+      rating: 4.4,
+      amenities: ["breakfast", "pool"],
+      price: 360,
+      currency: "USD",
+      link: {
+        url: "https://www.booking.com/souq-view",
+        provider: "Booking.com",
+      },
+    },
+    car: {
+      provider: "Hertz",
+      category: "Compact",
+      price: 92,
+      currency: "USD",
+      link: { url: "https://www.hertz.com/compact", provider: "Hertz" },
+    },
+    tour: {
+      name: "Desert Safari Tour",
+      included: true,
+      link: { url: "https://www.tiqets.com/desert-safari", provider: "Tiqets" },
+    },
+    summary: {
+      total_price: 1432,
+      currency: "USD",
+      under_budget: true,
+    },
+  },
+};
+
 class ChatScreenClass extends React.Component {
   constructor(props) {
     super(props);
@@ -31,7 +82,7 @@ class ChatScreenClass extends React.Component {
       message: "",
       isTyping: false,
       messages: [],
-      phase: "idle", // 'idle' | 'awaiting_dates' | 'awaiting_addons' | 'done'
+      phase: "awaiting_addons", // 'idle' | 'awaiting_dates' | 'awaiting_addons' | 'done'
     };
     this.flatListRef = React.createRef();
   }
@@ -60,11 +111,65 @@ class ChatScreenClass extends React.Component {
 
   // tiny “NLU”
   normalize = (s) =>
-    s
-      .toLowerCase()
-      .replace(/[–—]/g, "-") // normalize en/em dash
-      .replace(/\s+/g, " ")
-      .trim();
+    s.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+
+  // convert a backend response (like SAMPLE_PACKAGE) into chat text + internal links
+  buildPackageMessage = (pkgRoot) => {
+    const pkg = pkgRoot.package;
+    const text =
+      `Perfect 👌 Here’s your package:\n` +
+      `Flight: ${pkg.flight.airline}, ${pkg.flight.type}, ${formatCurrency(
+        pkg.flight.price,
+        pkg.flight.currency
+      )}\n` +
+      `Hotel: ${pkg.hotel.name} ⭐${
+        pkg.hotel.rating
+      }, ${pkg.hotel.amenities.join(" + ")}, ${formatCurrency(
+        pkg.hotel.price,
+        pkg.hotel.currency
+      )}\n` +
+      `Car: ${pkg.car.provider} ${pkg.car.category}, ${formatCurrency(
+        pkg.car.price,
+        pkg.car.currency
+      )}\n` +
+      `Desert Safari Tour: ${
+        pkg.tour.included ? "Included 🎟️" : "Optional"
+      }\n` +
+      `Total: ${formatCurrency(
+        pkg.summary.total_price,
+        pkg.summary.currency
+      )} ${pkg.summary.under_budget ? "(under budget 🎉)" : ""}`;
+
+    // INTERNAL links: no external navigation — MessageBubble should navigate to "ProviderPreview"
+    const links = [
+      {
+        label: "Flight Link – Expedia",
+        provider: pkg.flight.link.provider,
+        type: "flight",
+        payload: pkg.flight,
+      },
+      {
+        label: "Hotel Link – Booking.com",
+        provider: pkg.hotel.link.provider,
+        type: "hotel",
+        payload: pkg.hotel,
+      },
+      {
+        label: "Car Link – Hertz",
+        provider: pkg.car.link.provider,
+        type: "car",
+        payload: pkg.car,
+      },
+      {
+        label: "Tour Link – Tiqets",
+        provider: pkg.tour.link.provider,
+        type: "tour",
+        payload: pkg.tour,
+      },
+    ];
+
+    return { text, links };
+  };
 
   getBotReply = (raw) => {
     const text = this.normalize(raw);
@@ -92,28 +197,11 @@ class ChatScreenClass extends React.Component {
     }
 
     // 3) Addons: car + desert safari
-    const wantsCar = /car|rental car|compact/i.test(text);
-    const wantsSafari = /desert safari|safari tour/i.test(text);
+    const wantsCar = /(^|\s)(car|rental car|compact)(\s|$)/i.test(text);
+    const wantsSafari = /(desert safari|safari tour)/i.test(text);
     if (phase === "awaiting_addons" && wantsCar && wantsSafari) {
-      return {
-        nextPhase: "done",
-        reply:
-          "Perfect 👌 Here’s your package:\n" +
-          "Flight: Qatar Airways, Non-Stop, $980\n" +
-          "Hotel: Souq View ⭐4.4, breakfast + pool, $360\n" +
-          "Car: Hertz Compact, $92\n" +
-          "Desert Safari Tour: Included 🎟️\n" +
-          "Total: $1,432 (under budget 🎉)",
-        links: [
-          { label: "Flight Link – Expedia", url: "https://www.expedia.com/" },
-          {
-            label: "Hotel Link – Booking.com",
-            url: "https://www.booking.com/",
-          },
-          { label: "Car Link – Hertz", url: "https://www.hertz.com/" },
-          { label: "Tour Link – Tiqets", url: "https://www.tiqets.com/" },
-        ],
-      };
+      const { text: reply, links } = this.buildPackageMessage(SAMPLE_PACKAGE);
+      return { nextPhase: "done", reply, links };
     }
 
     // 4) Fallback
@@ -141,10 +229,9 @@ class ChatScreenClass extends React.Component {
     this.setState({ message: "", isTyping: true });
 
     setTimeout(() => {
-      // typing indicator
+      // typing indicator (Lottie shown by MessageBubble when isTyping is true)
       this.addMessage({
         role: "bot",
-        // text: "Thinking...",
         timestamp: new Date(),
         isTyping: true,
       });
@@ -187,6 +274,7 @@ class ChatScreenClass extends React.Component {
         text={item.text}
         time={item.timestamp}
         links={item.links}
+        navigation={this.props.navigation}
       />
     );
   };

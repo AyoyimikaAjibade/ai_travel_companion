@@ -25,7 +25,11 @@ import MyTripsScreen from "./src/screens/MyTripsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 // 👉 Your custom splash screen component
 import AppSplashScreen from "./src/screens/SplashScreen";
-
+import ProviderPreview from "./src/screens/ProviderPreview";
+import FakePayment from "./src/screens/FakePayment";
+import ExpediaCheckoutClone from "./src/screens/ExpediaCheckoutClone";
+import BookingCheckoutClone from "./src/screens/BookingCheckoutClone";
+import GenericCheckout from "./src/screens/GenericCheckout";
 // Icons
 import { MessageCircle, Package, Luggage, Settings } from "lucide-react-native";
 
@@ -122,6 +126,17 @@ export default function App() {
               headerStyle: { backgroundColor: "#0B1020" },
             }}
           />
+          <Stack.Screen name="ProviderPreview" component={ProviderPreview} />
+          <Stack.Screen name="FakePayment" component={FakePayment} />
+          <Stack.Screen
+            name="ExpediaCheckout"
+            component={ExpediaCheckoutClone}
+          />
+          <Stack.Screen
+            name="BookingCheckout"
+            component={BookingCheckoutClone}
+          />
+          <Stack.Screen name="GenericCheckout" component={GenericCheckout} />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
