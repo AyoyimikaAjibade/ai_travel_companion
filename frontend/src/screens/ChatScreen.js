@@ -15,6 +15,7 @@ import MessageBubble from "../components/MessageBubble";
 import TagChip from "../components/TagChip";
 import EmptyState from "../components/EmptyState";
 import { COLORS, SPACING } from "../theme";
+import { sendMessage } from "../lib/api"; // centralized api client
 
 const QUICK_CHIPS = [
   "Add car",
@@ -24,57 +25,6 @@ const QUICK_CHIPS = [
   "4+ star hotels",
 ];
 
-// ---- helpers ----
-const formatCurrency = (amount, currency = "USD") => {
-  const symbol = currency === "USD" ? "$" : `${currency} `;
-  if (typeof amount === "number") return symbol + amount.toLocaleString();
-  return symbol + amount;
-};
-
-// Example backend-like package we’ll inject when flow reaches “done”
-const SAMPLE_PACKAGE = {
-  package: {
-    flight: {
-      airline: "Qatar Airways",
-      type: "Non-Stop",
-      price: 980,
-      currency: "USD",
-      link: {
-        url: "https://www.expedia.com/qatar-flight",
-        provider: "Expedia",
-      },
-    },
-    hotel: {
-      name: "Souq View",
-      rating: 4.4,
-      amenities: ["breakfast", "pool"],
-      price: 360,
-      currency: "USD",
-      link: {
-        url: "https://www.booking.com/souq-view",
-        provider: "Booking.com",
-      },
-    },
-    car: {
-      provider: "Hertz",
-      category: "Compact",
-      price: 92,
-      currency: "USD",
-      link: { url: "https://www.hertz.com/compact", provider: "Hertz" },
-    },
-    tour: {
-      name: "Desert Safari Tour",
-      included: true,
-      link: { url: "https://www.tiqets.com/desert-safari", provider: "Tiqets" },
-    },
-    summary: {
-      total_price: 1432,
-      currency: "USD",
-      under_budget: true,
-    },
-  },
-};
-
 class ChatScreenClass extends React.Component {
   constructor(props) {
     super(props);
@@ -82,10 +32,14 @@ class ChatScreenClass extends React.Component {
       message: "",
       isTyping: false,
       messages: [],
-      phase: "awaiting_addons", // 'idle' | 'awaiting_dates' | 'awaiting_addons' | 'done'
+      phase: "idle",
+      sessionId: null,
     };
     this.flatListRef = React.createRef();
   }
+
+  // Unique id generator: timestamp + short random suffix
+  generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
   // smooth scroll to bottom
   scrollToEndSmooth = () => {
@@ -96,11 +50,29 @@ class ChatScreenClass extends React.Component {
     });
   };
 
+  /**
+   * Add a message to state.messages
+   * Accepts an object like { role, text, timestamp, isTyping, links, id? }
+   * If id is not supplied, generate a unique one here.
+   */
   addMessage = (newMessage) => {
-    const messageWithId = { ...newMessage, id: Date.now().toString() };
-    this.setState((prevState) => ({
-      messages: [...prevState.messages, messageWithId],
-    }));
+    if (!newMessage || typeof newMessage !== "object") return;
+
+    const messageWithId = {
+      ...newMessage,
+      id: newMessage.id || this.generateId(),
+      timestamp: newMessage.timestamp || new Date(),
+    };
+
+    this.setState(
+      (prevState) => ({
+        messages: [...prevState.messages, messageWithId],
+      }),
+      () => {
+        // ensure we scroll whenever a new message is added
+        this.scrollToEndSmooth();
+      }
+    );
   };
 
   removeTypingIndicators = () => {
@@ -109,157 +81,85 @@ class ChatScreenClass extends React.Component {
     }));
   };
 
-  // tiny “NLU”
-  normalize = (s) =>
-    s.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
-
-  // convert a backend response (like SAMPLE_PACKAGE) into chat text + internal links
-  buildPackageMessage = (pkgRoot) => {
-    const pkg = pkgRoot.package;
-    const text =
-      `Perfect 👌 Here’s your package:\n` +
-      `Flight: ${pkg.flight.airline}, ${pkg.flight.type}, ${formatCurrency(
-        pkg.flight.price,
-        pkg.flight.currency
-      )}\n` +
-      `Hotel: ${pkg.hotel.name} ⭐${
-        pkg.hotel.rating
-      }, ${pkg.hotel.amenities.join(" + ")}, ${formatCurrency(
-        pkg.hotel.price,
-        pkg.hotel.currency
-      )}\n` +
-      `Car: ${pkg.car.provider} ${pkg.car.category}, ${formatCurrency(
-        pkg.car.price,
-        pkg.car.currency
-      )}\n` +
-      `Desert Safari Tour: ${
-        pkg.tour.included ? "Included 🎟️" : "Optional"
-      }\n` +
-      `Total: ${formatCurrency(
-        pkg.summary.total_price,
-        pkg.summary.currency
-      )} ${pkg.summary.under_budget ? "(under budget 🎉)" : ""}`;
-
-    // INTERNAL links: no external navigation — MessageBubble should navigate to "ProviderPreview"
-    const links = [
-      {
-        label: "Flight Link – Expedia",
-        provider: pkg.flight.link.provider,
-        type: "flight",
-        payload: pkg.flight,
-      },
-      {
-        label: "Hotel Link – Booking.com",
-        provider: pkg.hotel.link.provider,
-        type: "hotel",
-        payload: pkg.hotel,
-      },
-      {
-        label: "Car Link – Hertz",
-        provider: pkg.car.link.provider,
-        type: "car",
-        payload: pkg.car,
-      },
-      {
-        label: "Tour Link – Tiqets",
-        provider: pkg.tour.link.provider,
-        type: "tour",
-        payload: pkg.tour,
-      },
-    ];
-
-    return { text, links };
-  };
-
-  getBotReply = (raw) => {
-    const text = this.normalize(raw);
-    const { phase } = this.state;
-
-    // 1) Initial intent: SF -> Doha in November
-    const mentionsRoute =
-      text.includes("san francisco") && text.includes("doha");
-    const mentionsNov = text.includes("november");
-    if (mentionsRoute && mentionsNov) {
-      return {
-        nextPhase: "awaiting_dates",
-        reply: "Got it ✅ Can you confirm exact dates in November?",
-      };
-    }
-
-    // 2) Dates: “Nov 10–15” variants
-    const datesRegex = /(nov|november)\s*\d{1,2}\s*([-]|to)\s*\d{1,2}/i;
-    if (phase === "awaiting_dates" && datesRegex.test(text)) {
-      return {
-        nextPhase: "awaiting_addons",
-        reply:
-          "Perfect 👌 Budget $1500 noted. Do you also want a rental car or attractions included?",
-      };
-    }
-
-    // 3) Addons: car + desert safari
-    const wantsCar = /(^|\s)(car|rental car|compact)(\s|$)/i.test(text);
-    const wantsSafari = /(desert safari|safari tour)/i.test(text);
-    if (phase === "awaiting_addons" && wantsCar && wantsSafari) {
-      const { text: reply, links } = this.buildPackageMessage(SAMPLE_PACKAGE);
-      return { nextPhase: "done", reply, links };
-    }
-
-    // 4) Fallback
-    return {
-      nextPhase: phase,
-      reply: "Hi there! 👋 I'm TWOS, your travel planning assistant.",
-    };
-  };
-
-  handleSend = () => {
-    const { message, isTyping } = this.state;
-    if (!message.trim() || isTyping) return;
+  handleSend = async () => {
+    const { message, isTyping, phase, sessionId } = this.state;
+    if (!message || !message.trim() || isTyping) return;
 
     Keyboard.dismiss();
 
-    // user bubble
-    const userMessage = {
+    // Add user bubble (unique id generated inside addMessage)
+    this.addMessage({
       role: "user",
       text: message,
       timestamp: new Date(),
-    };
-    this.addMessage(userMessage);
+    });
 
-    // clear & typing
+    // clear input and flip typing state
     this.setState({ message: "", isTyping: true });
 
-    setTimeout(() => {
-      // typing indicator (Lottie shown by MessageBubble when isTyping is true)
-      this.addMessage({
-        role: "bot",
-        timestamp: new Date(),
-        isTyping: true,
-      });
+    // Add typing indicator (also unique)
+    this.addMessage({
+      role: "bot",
+      text: null,
+      timestamp: new Date(),
+      isTyping: true,
+    });
 
-      setTimeout(() => {
-        // remove typing
-        this.removeTypingIndicators();
+    try {
+      // send to centralized API (lib/api)
+      const apiResp = await sendMessage({ message, phase, sessionId });
 
-        // scripted reply
-        const { reply, links, nextPhase } = this.getBotReply(userMessage.text);
+      // remove typing indicator(s)
+      this.removeTypingIndicators();
 
+      // add bot textual reply
+      if (apiResp.reply) {
         this.addMessage({
           role: "bot",
-          text: reply,
-          links,
+          text: apiResp.reply,
           timestamp: new Date(),
+          links: apiResp.links || [],
         });
+      }
 
-        this.setState({ isTyping: false, phase: nextPhase }, () =>
-          this.scrollToEndSmooth()
-        );
-      }, 1500);
-    }, 800);
+      // if structured package present, add a follow-up message
+      if (apiResp.package) {
+        this.addMessage({
+          role: "bot",
+          text: "Package ready — open provider preview links below.",
+          timestamp: new Date(),
+          links: (apiResp.links || []).map((l) => ({
+            label: l.label,
+            provider: l.provider,
+            type: l.type,
+            payload: l.payload || l,
+          })),
+        });
+      }
+
+      // update phase/session and clear typing state
+      this.setState({
+        phase: apiResp.nextPhase || phase,
+        sessionId: apiResp.sessionId || sessionId,
+        isTyping: false,
+      });
+    } catch (err) {
+      // API error: clear typing and show fallback message
+      this.removeTypingIndicators();
+
+      this.addMessage({
+        role: "bot",
+        text: "Sorry — couldn't reach the server. Check the mock server URL in lib/api.js or ensure it's running. Hi there! 👋 I'm TWOS, your travel planning assistant.",
+        timestamp: new Date(),
+      });
+
+      this.setState({ isTyping: false });
+    }
   };
 
   handleQuickChip = (chipText) => {
     this.setState({ message: chipText }, () => {
-      setTimeout(() => this.handleSend(), 100);
+      setTimeout(() => this.handleSend(), 120);
     });
   };
 
@@ -297,7 +197,7 @@ class ChatScreenClass extends React.Component {
               ref={this.flatListRef}
               data={messages}
               renderItem={this.renderMessage}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.id || item._localId}
               style={styles.messagesList}
               contentContainerStyle={styles.messagesContainer}
               keyboardShouldPersistTaps="handled"

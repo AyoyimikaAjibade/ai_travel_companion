@@ -1,84 +1,56 @@
-// src/lib/api.js
-import axios from "axios";
+// lib/api.js
+// Centralized API client for TWOS mock server
+// Usage:
+//   import { sendMessage, setApiBaseUrl } from "../lib/api";
+//   setApiBaseUrl("http://192.168.1.100:3000"); // optional at app start
+//   const resp = await sendMessage({ message: "hi", phase: "idle" });
 
-// Mock data
-import parseMock from "../mocks/parse.json";
-import packagesMock from "../mocks/packages.json";
-import tripsMock from "../mocks/trips.json";
+let API_BASE = "http://localhost:3000"; // default for simulator/dev machine
 
-// Check if we should use mocks
-const USE_MOCKS = !process.env.EXPO_PUBLIC_API_BASE;
+/**
+ * Replace base URL at runtime. Useful for switching to LAN IP when testing on device.
+ * Example: setApiBaseUrl("http://192.168.1.100:3000");
+ */
+export function setApiBaseUrl(url) {
+  API_BASE = url;
+}
 
-// Create axios instance
-const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_BASE || "http://localhost:8000",
-  timeout: 10000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+/**
+ * Post chat message to /message endpoint.
+ * Accepts an object: { message: string, phase?: string, sessionId?: string }
+ * Returns parsed JSON from server (or throws).
+ */
+export async function sendMessage({
+  message,
+  phase = "idle",
+  sessionId = null,
+} = {}) {
+  if (!message && typeof message !== "string") {
+    throw new Error("sendMessage requires { message: string }");
+  }
 
-// API methods
-export const apiClient = {
-  /**
-   * Parse natural language message
-   * @param {string} message
-   * @returns {Promise}
-   */
-  nluParse: async (message) => {
-    if (USE_MOCKS) {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      return { data: parseMock };
-    }
+  const endpoint = `${API_BASE.replace(/\/$/, "")}/message`;
 
-    return api.post("/nlu/parse", { message });
-  },
+  const body = {
+    message,
+    phase,
+    sessionId,
+  };
 
-  /**
-   * Build travel plan based on slots and preferences
-   * @param {Object} slots
-   * @param {Object} prefs
-   * @returns {Promise}
-   */
-  planBuild: async (slots, prefs) => {
-    if (USE_MOCKS) {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      return { data: packagesMock };
-    }
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
-    return api.post("/plan/build", { slots, prefs });
-  },
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API error ${res.status} ${res.statusText} ${text}`);
+  }
 
-  /**
-   * Get user trips
-   * @returns {Promise}
-   */
-  getTrips: async () => {
-    if (USE_MOCKS) {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      return { data: tripsMock };
-    }
+  const json = await res.json().catch(() => {
+    throw new Error("Invalid JSON response from server");
+  });
 
-    return api.get("/trips");
-  },
-
-  /**
-   * Save a trip
-   * @param {Object} trip
-   * @returns {Promise}
-   */
-  saveTrip: async (trip) => {
-    if (USE_MOCKS) {
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      return { data: { tripId: `mock_${Date.now()}` } };
-    }
-
-    return api.post("/trips/save", trip);
-  },
-};
-
-export default api;
+  return json;
+}
