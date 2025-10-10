@@ -3,7 +3,7 @@
 # 1. Get you Gemini API key and copy to .env file
 # 2. python3 -m venv venv
 # 3. source venv/bin/activate
-# 4. pip3 install uvicorn fastapi python-dotenv requests
+# 4. pip install -U uvicorn fastapi python-dotenv requests ulid-py
 # 5. python3 -m uvicorn ai_npu:app --reload --host 0.0.0.0
 # 6. Swagger UI: http://127.0.0.1:8000/docs
 # 7. deactivate (to close venv)
@@ -11,21 +11,21 @@
 
 from fastapi import FastAPI
 from dotenv import load_dotenv
-from datetime import datetime
-from api_services import amadeus_search_flights,amadeus_search_hotels
+from typing import Optional, List, Dict, Any
+from api_services import (
+    call_gemini, 
+    amadeus_search_flights,
+    amadeus_search_hotels,
+    amadeus_search_attractions    )
 from base_models import (
-    Request,ParseResponse, ClarifyRequest, ClarifyResponse,
-    TravelOptionsResponse,Slots,FlightOption,HotelOption
+    ChatRequest,ParseResponse, ClarifyRequest, ClarifyResponse,
+    TravelOptionsResponse,Slots,FlightOption,HotelOption,
+    CarOption, AttractionOption, Slots
 )
 import os
-import json
-import traceback
 import requests
 
 load_dotenv()
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-#gemini.configure(api_key=GEMINI_KEY)
-print(f"✅ Loaded Gemini Key: {'Yes' if GEMINI_KEY else 'No'}")
 
 app = FastAPI (
         title = "TWOS AI NLP Testing",
@@ -33,156 +33,35 @@ app = FastAPI (
         version="1.0.0"
     )
 
-# -------------------------------------
-# AI - Gemini to Parse User's request
-# -------------------------------------
-def call_gemini(user_message: str) -> dict:    
-        
-    schema_body = {
-            "slots": {
-                    "origin_airport_code": "SFO",
-                    "destination_airport_code": "LHR",
-                    "destination_city_code":"LON",
-                    "dates": {"start": "2025-11-10", "end":"2025-11-20"},
-                    "pax": {"adults": 1, "kids": 1},
-                    "budget": 1500,
-                    "hotel": {"amenities": ["breakfast", "pool"]},
-                    "car" : False
-                    },
-            "missing": ["car"],
-            "confidence": {
-                    "origin_airport_code": 0.9,
-                    "destination_airport_code": 0.9,
-                    "destination_city_code":0.9,
-                    "dates": 0.9,
-                    "pax": 0.9,
-                    "budget": 0.9,
-                    "hotel": 0.9
-                    }
-            }
+# ------------------------------
+# Functions for endpoints
+# ------------------------------
 
-    current_date = datetime.now().strftime("%Y-%m-%d")
+def _strip_nones(x):
+    if isinstance(x, dict):
+        return {k: _strip_nones(v) for k, v in x.items() if v is not None}
+    if isinstance(x, list):
+        return [_strip_nones(v) for v in x]
+    return x
 
-    prompt = (
-        "You are a travel-NLU extractor. Extract slots and return ONLY valid JSON.\n"
-        "\n"
-        "OUTPUT CONTRACT (strict):\n"
-        "- Respond with exactly ONE JSON object.\n"
-        "- Keys allowed at the top level: {\"slots\", \"missing\", \"confidence\"}.\n"
-        "- In slots, only these keys: {\"origin_airport_code\",\"destination_airport_code\",\"destination_city_code\",\"dates\",\"pax\",\"budget\",\"hotel\",\"car\"}.\n"
-        "- Do NOT output null anywhere. If you cannot fill a value, OMIT that field and list its name in `missing`.\n"
-        "- Confidence: provide 0.0–1.0 only for fields you filled.\n"
-        "\n"
-        "FILLING RULES:\n"
-        "1) Airports must be IATA airport codes (e.g., SFO, JFK). Hotels/city use IATA city codes (e.g., PAR, NYC, LON, SEL).\n"
-        "2) Common mappings:\n"
-        "   • \"SF\" / \"San Fran\" / \"San Francisco\" → origin_airport_code=SFO (unless clearly destination)\n"
-        "   • \"Seoul\" → destination_airport_code=ICN, destination_city_code=SEL\n"
-        "   • \"Paris\" → destination_airport_code=CDG (default), destination_city_code=PAR\n"
-        "3) pax:\n"
-        "   • pax.adults = number of adults explicitly mentioned.\n"
-        "   • pax.kids = number of children explicitly mentioned (\"kids\", \"children\"). If none mentioned, set pax.kids=0.\n"
-        "4) car/hotel:\n"
-        "   • If message mentions a rental car, set car=true.\n"
-        "   • If user says they DON'T need a hotel, set hotel.amenities=[ ] and do NOT add hotel to `missing`.\n"
-        "5) budget: parse numbers with symbols/abbreviations (\"$5k\" → 5000). Assume USD.\n"
-        "6) dates: output ISO YYYY-MM-DD. Parse ranges like \"Nov 10 to Nov 25\".\n"
-        "7) Inference & missing:\n"
-        "   • Fill only when unambiguous; otherwise omit and add the field name to `missing`.\n"
-        "   • Do NOT invent values.\n"
-        "\n"
-        f"The current date is {current_date}.\\n\\n"
-        "Schema shape example (values are illustrative only):\n"
-        f"{json.dumps(schema_body, indent=2)}\\n\\n"
-        "Few-shot examples (format to mimic):\n"
-        "Example A:\n"
-        "User: \"I want to fly from San Francisco to Paris for 2 adults from Nov 10 to Nov 20 and I need a 4 or 5 star hotel\"\n"
-        "JSON:\n"
-        "{\n"
-        "  \"slots\": {\n"
-        "    \"origin_airport_code\": \"SFO\",\n"
-        "    \"destination_airport_code\": \"CDG\",\n"
-        "    \"destination_city_code\": \"PAR\",\n"
-        "    \"dates\": {\"start\":\"2025-11-10\",\"end\":\"2025-11-20\"},\n"
-        "    \"pax\": {\"adults\":2, \"kids\":0},\n"
-        "    \"hotel\": {\"amenities\": []}\n"
-        "  },\n"
-        "  \"missing\": [],\n"
-        "  \"confidence\": {\"origin_airport_code\":0.9,\"destination_airport_code\":0.9,\"destination_city_code\":0.9,\"dates\":0.9,\"pax\":0.9,\"hotel\":0.9}\n"
-        "}\n"
-        "\n"
-        "Example B:\n"
-        "User: \"I am planning a family trip from SF to Seoul. There are 4 people, 2 adults and 2 kids. From Nov 10 to Nov 25. I need a rental car during the trip. I don't need a hotel. My budget is $5k.\"\n"
-        "JSON:\n"
-        "{\n"
-        "  \"slots\": {\n"
-        "    \"origin_airport_code\": \"SFO\",\n"
-        "    \"destination_airport_code\": \"ICN\",\n"
-        "    \"destination_city_code\": \"SEL\",\n"
-        "    \"dates\": {\"start\":\"2025-11-10\",\"end\":\"2025-11-25\"},\n"
-        "    \"pax\": {\"adults\":2, \"kids\":2},\n"
-        "    \"budget\": 5000,\n"
-        "    \"hotel\": {\"amenities\": []},\n"
-        "    \"car\": true\n"
-        "  },\n"
-        "  \"missing\": [],\n"
-        "  \"confidence\": {\"origin_airport_code\":0.9,\"destination_airport_code\":0.9,\"destination_city_code\":0.9,\"dates\":0.9,\"pax\":0.9,\"budget\":0.9,\"car\":0.9}\n"
-        "}\n"
-        "\n"
-        f"User message: \\\"{user_message}\\\"\\n\\n"
-        "JSON Response:"
-    )
+def merge_slots_preserve_id(existing: Slots, incoming: Dict[str, Any]) -> Slots:
+    """
+    Merge LLM-parsed fields into existing Slots while preserving slot_id.
+    Rebuilds a *validated* Slots so nested models (Dates/Pax/HotelPreferences) are correct.
+    """
+    cleaned = _strip_nones(incoming or {})
+    cleaned.pop("slot_id", None)  # never accept client/LLM id
 
+    merged_dict = existing.model_dump()      # to plain dict
+    merged_dict.update(cleaned)              # apply updates
+    merged_dict["slot_id"] = existing.slot_id
 
-    GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
-    headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json"
-    }
+    # IMPORTANT: rebuild Slots to validate/construct submodels
+    return Slots.model_validate(merged_dict)
 
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "response_mime_type": "application/json",
-            "temperature":0
-        }
-    }
-
-    try:
-
-        assert isinstance(headers, dict), f"headers is {type(headers)} (should be dict)"
-        
-        # AI_model = gemini.GenerativeModel("gemini-1.5-flash", generation_config={"response_mime_type":"application/json"})
-        # response = AI_model.generate_content(prompt)
-        response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
-        response.raise_for_status()
-
-        raw_json_string = response.json()['candidates'][0]['content']['parts'][0]['text']
-        print("--- 🔴 Gemini Raw Output 🔴 ---")
-        print(response.text)
-        return json.loads(raw_json_string)
-    
-
-    except Exception as e:
-        print("\n--- 🔴 GEMINI PARSE ERROR 🔴 ---")
-        
-        if 'response' in locals() and hasattr(response,'text'):
-            print("--- RAW API RESPONSE FROM GOOGLE ---")
-            print(response.text)
-            print("------------------------------------")
-       
-        traceback.print_exc()
-        print("------------------------------------")
-        
-        # Return an empty structure on failure
-        return {"slots": {}, "missing": [], "confidence": {}}
-
-
-#----------
+# ------------------------------
 # Endponts
-#----------
+# ------------------------------
 
 @app.get("/")
 def root():
@@ -194,23 +73,46 @@ def health():
     return {"Live": True, "mode": "AI"}
 
 # Parse the user's request (natural language text)
-@app.post("/nlu/parse", response_model = ParseResponse)
-def parse(request: Request):
-    result = call_gemini(request.message)
-    
-    slots_dict = result.get("slots", {})
-    missing = result.get("missing", [])
-    confidence = result.get("confidence", {})
+@app.post("/chat", response_model = ParseResponse)
+def chat(request: ChatRequest):
+    """
+    Parses the user's natural language message to fill or update travel slots.
+    - For initial requests, just provide the 'message'.
+    - For revisions, provide the new 'message' and the 'current_slots' from the existing plan.
 
+    FE sends: { message, current_slots }
+    BE returns: { slots, missing }
+    - Generate slot_id on first request
+    - Preserve slot_id across all revisions
+    """
+    # The call_gemini function should be adapted to handle current_slots for context
+    # For example, the prompt could be:
+    # "Given the existing travel plan {current_slots}, update it based on the following message: {message}"
+
+    # 1) Normalize current slots & guarantee slot_id
+    current_slots = request.current_slots or Slots()  # Slots validator auto-assigns slot_id
+    # (If FE sent slot_id:null, validator also assigns a new id)
+
+    # 2) LLM revise/fill and read parsed fields
+    result = call_gemini(request.message, current_slots)
+
+    slots_dict = result.get("current_slots", {})
+    missing = result.get("missing", [])
+    # confidence = result.get("confidence", {})
+
+    # If missing is exist, then return current slots and missing. Otherwise, call APIs
+    # 3) Merge LLM slots into current slots, but preserve slot_id
     try:
-        slots = Slots(**slots_dict)
+        new_current_slots = merge_slots_preserve_id(current_slots, slots_dict)
     except Exception as e:
         print("SLOTS PARSE ERROR", repr(e), "payload", slots_dict)
-        slots = Slots()
+        new_current_slots = current_slots
 
-    return ParseResponse(slots=slots, missing=missing, confidence=confidence)
+    return ParseResponse(current_slots=new_current_slots, missing=missing)
+    # return ParseResponse(current_slots=new_current_slots, missing=missing, confidence=confidence)
+    # return ParseMissing(missing=missing)
 
-@app.post("/nlu/clarify", response_model=ClarifyResponse)
+@app.post("/clarify", response_model=ClarifyResponse)
 def clarify(request: ClarifyRequest):
 
     #If there is no missing information
@@ -232,8 +134,9 @@ def clarify(request: ClarifyRequest):
     missing_info = request.missing[0]
     return ClarifyResponse(question=missing_info_map.get(missing_info, f"Could you provide {missing_info}?"))
 
-@app.post("/search", response_model=TravelOptionsResponse)
-def search_options(slots:Slots):
+# This endpoint now finds the CHEAPEST options and returns a single plan
+@app.post("/search_for_dev", response_model=TravelOptionsResponse)
+def search_options_for_dev(slots:Slots):
     print("Received slots for search: ", slots.model_dump())
 
     flight_results = amadeus_search_flights(slots)
@@ -244,6 +147,90 @@ def search_options(slots:Slots):
         hotels=[HotelOption(**hotel) for hotel in hotel_results],
     )
 
+# Handle parse and search options at once.
+# 1. Parse the user's natural language input
+# 2. Use ONLY "slots" data in the parsed data
+# 3. send API calls
+
+# This endpoint now finds the CHEAPEST options and returns a single plan
+@app.post("/search", response_model=TravelOptionsResponse)
+def search_options(slots:Slots):
+    """
+    Receives a complete set of slots and returns a single, optimized travel plan.
+    Currently optimized for the CHEAPEST options.
+    """
+
+    print("✅ Received slots for search: ", slots.model_dump_json(indent=2))
+
+    cheapest_flight : Optional[FlightOption] = None
+    cheapest_hotel : Optional[HotelOption] = None
+    car : Optional[CarOption] = None
+    attractions_list : List[AttractionOption] = []
+
+    # --- Flight Search ---
+    can_search_flights = all ([
+        slots.origin_airport_code,
+        slots.destination_airport_code,
+        slots.dates.start,
+        slots.pax.adults is not None
+    ])
+    print(f"✅ CAN SEARCH FLIGHTS: {can_search_flights} ✅")
+
+    if can_search_flights:
+        print("🛩️ Searching for flights...")
+        try:
+            flight_results = amadeus_search_flights(slots)
+            if flight_results:
+                cheapest = min(flight_results,key=lambda x: x.get('price', float('inf')))
+                cheapest_flight = FlightOption(**cheapest)
+                print(f"\n✈️ Found cheapest flight: {cheapest_flight.airline} for ${cheapest_flight.price}")
+        except Exception as e:
+            print("🔴 Flight search failed 🔴: ", repr(e))
+
+    # --- Hotel Search ---
+    can_search_hotels = all([
+        slots.hotel.request,    # if user didn't want a hotel, this will be false and hotel search will be skipped
+        slots.destination_city_code,    
+        slots.dates.start, slots.dates.end,
+        slots.pax.adults is not None
+    ])
+    
+    if can_search_hotels:
+        print(f"\n✅ CAN SEARCH HOTELS: {can_search_hotels} ✅")
+        print("🏨 Searching for hotels...")
+
+        try:
+            hotel_results = amadeus_search_hotels(slots)
+            if hotel_results:
+                cheapest = hotel_results[0]
+                #cheapest = min(hotel_results, key=lambda x: x.get('price_per_night', float('inf')))
+                cheapest_hotel = HotelOption(**cheapest)
+                print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and total price is ${cheapest_hotel.total_price}\n")
+        except Exception as e:
+            print("🔴 Hotel search failed 🔴: ", repr(e))
+    else:
+        print(f"✅ HOTEL SEARCH IS SKIPPED ✅")
+
+    # --- Attraction Search ---
+    can_search_attractions = slots.destination_city_code is not None
+    print(f"✅ CAN SEARCH ATTRACTIONS: {can_search_attractions} ✅")
+
+    if can_search_attractions:
+        print("🎭 Searching for attractions...")
+        attraction_results = amadeus_search_attractions(slots)
+        if attraction_results:
+            attractions_list = [AttractionOption(**attr) for attr in attraction_results]
+            print(f"🎭 Found {len(attractions_list)} attractions.")
+
+
+    # --- Car Search ---
+
+    return TravelOptionsResponse(
+        flight = cheapest_flight,
+        hotel = cheapest_hotel,
+        # cars
+        attractions = attractions_list
+    )
 """
 @app.post("/preference/update")
 def preference_update(request: PreferenceUpdate): 

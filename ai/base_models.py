@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict
+import ulid
 
 #-------------------
 # NLP BaseModel classes
@@ -12,21 +13,25 @@ class Dates(BaseModel):
 
 # Features/Amenities of hotels. For example, free-WIFI, Breakfast, Pool, etc.
 class HotelPreferences(BaseModel):
+    request : Optional[bool] = None
     amenities: List[str] = []
+    rating : Optional[int] = None
 
 # Number of travelers / based on the frontend
 class Pax(BaseModel):
-    adults: Optional[int] = 1
+    adults: Optional[int] = 0
     kids: Optional[int] = 0
 
 # Slots to track
 class Slots(BaseModel):
     # origin: Optional[str] = None
     # destination: Optional[str] = None
+    slot_id: Optional[str] = None
 
     # For Amadeus Start
     origin_airport_code: Optional[str] = None
     destination_airport_code: Optional[str] = None
+    destination_city_name : Optional[str] = None
     destination_city_code: Optional[str] = None
     # For Amadeus End
 
@@ -35,23 +40,42 @@ class Slots(BaseModel):
     budget: Optional[float] = None
     hotel: HotelPreferences = HotelPreferences()
     car: Optional[bool] = None
+    attractions : List[str] = []
+
+    @model_validator(mode="after")
+    def _ensure_slot_id(self):
+        if not self.slot_id:
+            self.slot_id = ulid.new().str
+        return self
+
+    model_config = {
+        "extra": "ignore"  # ignore stray keys from LLM/FE
+    }
 
 # User's text(natural language). For example, “SF to Doha Nov 10–15…”
-class Request(BaseModel):
+class ChatRequest(BaseModel):
     message : str           # {"message": “SF to Doha Nov 10–15…” }
+    current_slots : Optional[Slots] = None
 
 # Body for response from AI model
 class ParseResponse(BaseModel):
-    slots : Slots
+    current_slots : Slots
     missing: List[str]              # list of slots that were not filled yet
-    confidence: Dict[str,float] = {}
+    # confidence: Optional[Dict[str,float]] = {}
 
-# nlu/clarify endpoint body
+"""
+# Body for response from AI model (Missing Only)
+class ParseMissing(BaseModel):
+    missing: List[str]              # list of slots that were not filled yet
+    current_slots = Slots           # Current slots with slot_id
+"""
+
+# clarify endpoint body
 class ClarifyRequest(BaseModel):
     missing: List[str]
     received: Optional[Slots] = None
     
-# nlu/clarify enpoints response body | Relies from backend to frontend(user UI)
+# clarify enpoints response body | Relies from backend to frontend(user UI)
 class ClarifyResponse(BaseModel):
     question: str
     options: Optional[List[str]] = None
@@ -77,8 +101,8 @@ class FlightOption(BaseModel):
 
 class HotelOption(BaseModel):
     name:str
-    rating: Optional[float] = None
-    price_per_night: float
+    rating: Optional[int] = None
+    total_price: float
     currency: str
     link: Optional[str] = None
 
@@ -95,9 +119,17 @@ class AttractionOption(BaseModel):
     currency:str
     link: Optional[str] = None
 
+class TravelOptionsResponse(BaseModel):
+    flight : Optional[FlightOption] = None
+    hotel : Optional[HotelOption] = None
+    car : Optional[CarOption] = None
+    attractions : List[AttractionOption] = []
+
+"""
 # Main response body
 class TravelOptionsResponse(BaseModel):
     flights: List[FlightOption] = []
     hotels: List[HotelOption] = []
     cars: List[CarOption] = []
     attractions: List[AttractionOption] = []
+"""
