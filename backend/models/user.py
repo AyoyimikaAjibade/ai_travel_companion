@@ -9,18 +9,22 @@ from .base import BaseModel
 class UserBase(SQLModel):
     """Base user model with common fields."""
     email: EmailStr = Field(unique=True, index=True, nullable=False)
+    username: str = Field(unique=True, index=True, nullable=False, max_length=50)
     first_name: Optional[str] = Field(default=None, max_length=100)
     last_name: Optional[str] = Field(default=None, max_length=100)
     is_active: bool = Field(default=True)
     is_superuser: bool = Field(default=False)
 
-class UserCreate(UserBase):
+class UserCreate(SQLModel):
     """Model for creating a new user."""
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr = Field(..., unique=True, index=True, nullable=False)
     password: str = Field(..., min_length=8, max_length=100)
 
 class UserUpdate(SQLModel):
     """Model for updating user information."""
     email: Optional[EmailStr] = None
+    username: Optional[str] = Field(None, max_length=50)
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     is_active: Optional[bool] = None

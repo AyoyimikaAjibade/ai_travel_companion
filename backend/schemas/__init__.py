@@ -2,11 +2,11 @@
 Pydantic schemas for request/response models.
 """
 
-from .user import User, UserCreate, UserUpdate, UserInDB, UserLogin, PasswordResetRequest, PasswordResetConfirm, ChangePassword
+from .user import User, UserCreate, UserUpdate, UserInDB, UserLogin, PasswordResetRequest, ChangePassword
 from .token import Token, TokenPayload, TokenCreate
 
 __all__ = [
     "User", "UserCreate", "UserUpdate", "UserInDB", "UserLogin",
-    "PasswordResetRequest", "PasswordResetConfirm", "ChangePassword",
+    "PasswordResetRequest", "ChangePassword",
     "Token", "TokenPayload", "TokenCreate"
 ]

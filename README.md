@@ -45,10 +45,11 @@ The AI Travel Companion is a modern travel planning platform that leverages arti
 
 ### Backend Features
 - **RESTful API**: Comprehensive API for all travel planning operations
-- **User Management**: Authentication, authorization, and user profiles
+- **User Management**: Authentication, authorization, and user profiles with username support
 - **Trip & Package Management**: CRUD operations for trips and packages
 - **Booking System**: Handle booking references and status tracking
 - **AI Integration**: Natural language processing for trip planning
+- **Enhanced Authentication**: JWT-based auth with logout, password reset, and temporary passwords
 
 ## 🏗️ Architecture
 
@@ -286,10 +287,41 @@ LOG_FILE=logs/app.log
 
 ## 📚 API Documentation
 
+### Authentication System
+
+The application uses JWT-based authentication with the following features:
+
+- **User Registration**: Requires username (unique), email (unique), and password
+- **Login**: Uses email/username and password to generate access and refresh tokens
+- **Token Management**: Access tokens expire in 8 hours, refresh tokens in 30 days
+- **Logout**: Server-side logout tracking for audit purposes
+- **Password Reset**: Generates temporary passwords for secure password recovery
+- **Password Change**: Allows users to change passwords with current password verification
+
+#### User Registration Format
+```json
+{
+  "username": "johndoe",
+  "email": "john@example.com",
+  "password": "securepassword123"
+}
+```
+
+**Note**: `first_name` and `last_name` fields are preserved in the user model for future user settings functionality but are not required for registration.
+
+#### Password Reset Flow
+1. User requests password reset with email
+2. System generates a temporary password
+3. User logs in with temporary password to get access token
+4. User changes password using change-password endpoint with access token
+
 ### Authentication Endpoints
-- `POST /api/v1/auth/register` - User registration
+- `POST /api/v1/auth/register` - User registration (requires username, email, password only)
 - `POST /api/v1/auth/login` - User login
 - `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/logout` - User logout
+- `POST /api/v1/auth/password-reset-request` - Request password reset (generates temporary password)
+- `POST /api/v1/auth/change-password` - Change password (requires current password)
 
 ### User Management
 - `GET /api/v1/users/me` - Get current user profile

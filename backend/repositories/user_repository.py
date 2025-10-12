@@ -20,6 +20,10 @@ class UserRepository(BaseRepository[User]):
         """Get user by email address."""
         return db.query(User).filter(User.email == email).first()
     
+    def get_by_username(self, db: Session, username: str) -> Optional[User]:
+        """Get user by username."""
+        return db.query(User).filter(User.username == username).first()
+    
     def get_active_users(self, db: Session, skip: int = 0, limit: int = 100) -> List[User]:
         """Get all active users."""
         return db.query(User).filter(User.is_active == True).offset(skip).limit(limit).all()

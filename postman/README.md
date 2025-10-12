@@ -34,7 +34,7 @@
 - ✅ Smart pre-request token checking
 
 ### 📝 **Pre-filled Test Data**
-- ✅ Default test user credentials
+- ✅ Default test user credentials (username, email, password)
 - ✅ Sample trip data (NYC → LAX)  
 - ✅ Sample package with flight/hotel
 - ✅ All IDs auto-captured and reused

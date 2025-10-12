@@ -45,6 +45,13 @@
       "enabled": true
     },
     {
+      "key": "test_username",
+      "value": "testuser",
+      "description": "Test user username",
+      "type": "default",
+      "enabled": true
+    },
+    {
       "key": "test_email",
       "value": "testuser@example.com",
       "description": "Test user email",
@@ -59,17 +66,10 @@
       "enabled": true
     },
     {
-      "key": "test_first_name",
-      "value": "John",
-      "description": "Test user first name",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "test_last_name",
-      "value": "Doe",
-      "description": "Test user last name",
-      "type": "default",
+      "key": "temp_password",
+      "value": "",
+      "description": "Temporary password from password reset",
+      "type": "secret",
       "enabled": true
     },
     {

@@ -168,9 +168,8 @@ if (pm.request.url.toString().includes('/packages') && pm.request.method === 'PO
 function generateTestData() {
     const randomId = Math.random().toString(36).substr(2, 9);
     return {
+        username: `testuser_${randomId}`,
         email: `test_${randomId}@example.com`,
-        firstName: 'Test',
-        lastName: 'User',
         password: 'testpass123'
     };
 }

@@ -121,7 +121,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\",\n  \"first_name\": \"{{test_first_name}}\",\n  \"last_name\": \"{{test_last_name}}\"\n}"
+              "raw": "{\n  \"username\": \"{{test_username}}\",\n  \"email\": \"{{test_email}}\",\n  \"password\": \"{{test_password}}\"\n}"
             },
             "url": {
               "raw": "{{full_url}}/auth/register",
@@ -228,6 +228,83 @@
               "path": ["auth", "refresh"]
             }
           }
+        },
+        {
+          "name": "Logout User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Logout successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    console.log('User logged out successfully');",
+                  "    // Clear tokens from environment",
+                  "    pm.environment.unset('access_token');",
+                  "    pm.environment.unset('refresh_token');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/auth/logout",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Password Reset Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Password reset request successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    if (responseData.temporary_password) {",
+                  "        pm.environment.set('temp_password', responseData.temporary_password);",
+                  "        console.log('Temporary password generated:', responseData.temporary_password);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/auth/password-reset-request",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "password-reset-request"]
+            }
+          }
         }
       ]
     },
@@ -279,12 +356,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"current_password\": \"{{test_password}}\",\n  \"new_password\": \"newpassword123\"\n}"
+              "raw": "{\n  \"current_password\": \"{{temp_password}}\",\n  \"new_password\": \"newpassword123\"\n}"
             },
             "url": {
-              "raw": "{{full_url}}/users/change-password",
+              "raw": "{{full_url}}/auth/change-password",
               "host": ["{{full_url}}"],
-              "path": ["users", "change-password"]
+              "path": ["auth", "change-password"]
             }
           }
         }

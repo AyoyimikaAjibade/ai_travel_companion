@@ -6,6 +6,8 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 from uuid import UUID
+import secrets
+import string
 
 from services.base_service import BaseService
 from repositories.user_repository import UserRepository
@@ -40,17 +42,26 @@ class AuthService(BaseService[User]):
         return user
     
     def register_user(self, db: Session, user_create: UserCreate) -> Optional[User]:
-        """Register a new user."""
-        # Check if user already exists
-        existing_user = self.user_repository.get_by_email(db, user_create.email)
-        if existing_user:
+        """Register a new user with username, email, and password."""
+        # Check if user already exists by email
+        existing_user_by_email = self.user_repository.get_by_email(db, user_create.email)
+        if existing_user_by_email:
             return None
         
-        # Create new user
+        # Check if username already exists
+        existing_user_by_username = self.user_repository.get_by_username(db, user_create.username)
+        if existing_user_by_username:
+            return None
+        
+        # Create new user with only required fields
         hashed_password = get_password_hash(user_create.password)
-        user_data = user_create.dict()
-        user_data.pop('password')  # Remove plain password
-        user_data['hashed_password'] = hashed_password
+        user_data = {
+            'username': user_create.username,
+            'email': user_create.email,
+            'hashed_password': hashed_password,
+            'is_active': True,
+            'is_superuser': False
+        }
         
         return self.user_repository.create(db, user_data)
     
@@ -85,6 +96,28 @@ class AuthService(BaseService[User]):
         self.user_repository.update(db, user, {"hashed_password": user.hashed_password})
         return True
     
+    def generate_temporary_password(self, length: int = 12) -> str:
+        """Generate a secure temporary password."""
+        # Use a mix of letters, digits, and special characters
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        password = ''.join(secrets.choice(alphabet) for _ in range(length))
+        return password
+    
+    def reset_password_with_temporary(self, db: Session, email: str) -> Optional[str]:
+        """Reset user password by generating a temporary password."""
+        user = self.user_repository.get_by_email(db, email)
+        if not user:
+            return None
+        
+        # Generate temporary password
+        temp_password = self.generate_temporary_password()
+        
+        # Update password with temporary password
+        user.hashed_password = get_password_hash(temp_password)
+        self.user_repository.update(db, user, {"hashed_password": user.hashed_password})
+        
+        return temp_password
+    
     def reset_password(self, db: Session, user_id: UUID, new_password: str) -> bool:
         """Reset user password (for admin or password reset flow)."""
         user = self.user_repository.get_by_id(db, user_id)
@@ -105,3 +138,19 @@ class AuthService(BaseService[User]):
         """Activate a user account."""
         user = self.user_repository.activate_user(db, user_id)
         return user is not None
+    
+    def logout_user(self, db: Session, user_id: UUID) -> bool:
+        """Logout user by invalidating their session (optional implementation)."""
+        # In a stateless JWT system, logout is typically handled client-side
+        # by removing the token from storage. However, we can track logout events
+        # for audit purposes or implement token blacklisting if needed.
+        
+        # For now, we'll just update the last login to track logout events
+        # In a production system, you might want to implement token blacklisting
+        user = self.user_repository.get_by_id(db, user_id)
+        if not user:
+            return False
+        
+        # Update last login timestamp to track logout
+        self.user_repository.update_last_login(db, user_id)
+        return True

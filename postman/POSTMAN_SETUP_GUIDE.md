@@ -26,8 +26,10 @@ This guide will help you set up Postman for testing the AI Travel Companion API 
 | `access_token` | JWT Access Token | ✅ |
 | `refresh_token` | JWT Refresh Token | ✅ |
 | `user_id` | Current user ID | ✅ |
+| `test_username` | Test user username | ❌ |
 | `test_email` | Test user email | ❌ |
 | `test_password` | Test user password | ❌ |
+| `temp_password` | Temporary password from reset | ✅ |
 | `trip_id` | Current trip ID | ✅ |
 | `package_id` | Current package ID | ✅ |
 
@@ -44,6 +46,7 @@ This guide will help you set up Postman for testing the AI Travel Companion API 
 2. **Verify the following variables are set correctly:**
    - `base_url`: `http://localhost:8000`
    - `api_version`: `/api/v1`
+   - `test_username`: `testuser` (or your preferred test username)
    - `test_email`: `testuser@example.com` (or your preferred test email)
    - `test_password`: `testpass123` (or your preferred test password)
 
@@ -67,7 +70,7 @@ The collection includes automatic token management:
    ```
    POST {{full_url}}/auth/register
    ```
-   - Uses pre-filled test data
+   - Uses pre-filled test data (username, email, password)
    - Automatically saves `user_id`
 
 3. **Login User** (Gets tokens)
@@ -90,6 +93,12 @@ The collection includes automatic token management:
 5. **✈️ Create Trip** → Create test trip data
 6. **📦 Create Package** → Create test package
 7. **Continue with other endpoints...**
+
+### 🔄 **Password Reset Testing Flow:**
+
+1. **🔐 Password Reset Request** → Get temporary password
+2. **🔐 Login User** (with temporary password) → Get new access token
+3. **🔐 Change Password** (with access token) → Set new permanent password
 
 ### 🎯 **Key Features:**
 
@@ -118,10 +127,9 @@ Edit environment variables to use your preferred test data:
 
 ```json
 {
+  "test_username": "your-username",
   "test_email": "your-email@example.com",
-  "test_password": "your-password",
-  "test_first_name": "Your Name",
-  "test_last_name": "Your Last Name"
+  "test_password": "your-password"
 }
 ```
 
@@ -169,7 +177,7 @@ Set up Postman monitoring to:
    - ✅ Verify token hasn't expired
 
 3. **"User already exists"**
-   - ✅ Change `test_email` to a new email
+   - ✅ Change `test_username` or `test_email` to new values
    - ✅ Or use "Login User" instead of "Register User"
 
 4. **Token refresh issues**

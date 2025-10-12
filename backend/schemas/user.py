@@ -6,16 +6,20 @@ from uuid import UUID
 class UserBase(BaseModel):
     """Base user schema with common fields."""
     email: EmailStr
+    username: str = Field(..., min_length=3, max_length=50)
     first_name: Optional[str] = None
     last_name: Optional[str] = None
 
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
     """Schema for creating a new user."""
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
     password: str = Field(..., min_length=8, max_length=100)
 
 class UserUpdate(BaseModel):
     """Schema for updating user information."""
     email: Optional[EmailStr] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     password: Optional[str] = Field(None, min_length=8, max_length=100)
@@ -46,11 +50,6 @@ class UserLogin(BaseModel):
 class PasswordResetRequest(BaseModel):
     """Schema for requesting a password reset."""
     email: EmailStr
-
-class PasswordResetConfirm(BaseModel):
-    """Schema for confirming password reset."""
-    token: str
-    new_password: str = Field(..., min_length=8, max_length=100)
 
 class ChangePassword(BaseModel):
     """Schema for changing password."""
