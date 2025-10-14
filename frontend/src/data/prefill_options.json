@@ -1,0 +1,37 @@
+{
+  "dates": ["Nov 10–15", "Nov 5–12", "Nov 20–25", "Nov 1–7", "Nov 25–30"],
+  "pax": [
+    "2 adults",
+    "2 adults, 1 child",
+    "1 adult",
+    "2 adults, 2 children",
+    "3 adults"
+  ],
+  "budget": ["$1500", "$1200", "$1000", "$2000", "Under $1500"],
+  "hotel": [
+    "Breakfast + Pool",
+    "Pool only",
+    "Breakfast only",
+    "4+ star hotels",
+    "Non-smoking room"
+  ],
+  "origin_airport_code": [
+    "From San Francisco (SFO)",
+    "From SFO",
+    "From San Francisco, CA",
+    "From Oakland (OAK)"
+  ],
+  "destination_airport_code": [
+    "To Doha (DOH)",
+    "To DOH",
+    "To Doha, Qatar",
+    "To Hamad Intl Airport"
+  ],
+  "car": [
+    "Yes, include a compact car",
+    "No, don't include a car",
+    "Yes — economy/compact",
+    "Yes — SUV"
+  ],
+  "destination_city_code": ["To Doha", "To DOH", "To Doha, Qatar"]
+}

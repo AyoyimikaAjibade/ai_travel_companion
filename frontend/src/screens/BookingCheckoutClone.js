@@ -67,7 +67,7 @@ const BookingCheckoutClone = ({ route, navigation }) => {
                 source={{
                   uri:
                     data.image ||
-                    "https://cf.bstatic.com/xdata/images/hotel/max1024x768/123456789.jpg?k=dummy",
+                    "https://www.hoteldel.com/wp-content/uploads/2021/01/hotel-del-coronado-views-suite-K1TOS1-K1TOJ1-1600x900-1.jpg",
                 }}
                 style={styles.hotelImg}
                 resizeMode="cover"

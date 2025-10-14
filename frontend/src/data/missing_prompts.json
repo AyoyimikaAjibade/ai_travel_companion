@@ -1,0 +1,40 @@
+{
+  "origin_airport_code": [
+    "Could you tell me the city or airport you're departing from? (e.g. San Francisco or SFO)",
+    "What's the departure airport or city?"
+  ],
+  "destination_airport_code": [
+    "Where would you like to go? Please provide the destination city or airport code.",
+    "I don't have the destination airport — which city or airport are you traveling to?",
+    "Which airport or city are you flying to? (e.g. Doha or DOH)"
+  ],
+  "destination_city_code": [
+    "Which city will you be visiting? Please give the city name (e.g. Doha).",
+    "I need the destination city — which city is your trip to?"
+  ],
+  "dates": [
+    "Can you confirm the exact travel dates? Example: Nov 10–15",
+    "Please provide start and end dates for your trip (e.g. Nov 10 to Nov 15).",
+    "When do you want to travel? Give me the start and end dates."
+  ],
+  "pax": [
+    "How many travelers are there? For example: 2 adults, 1 child.",
+    "Please tell me the number of adults and children traveling (e.g. 2 adults).",
+    "How many passengers? (adults and kids)"
+  ],
+  "budget": [
+    "What is your total budget for this trip? (e.g. $1500)",
+    "Please tell me your budget so I can keep options within it.",
+    "How much would you like to spend (approx)?"
+  ],
+  "hotel": [
+    "Any hotel preferences? For example: breakfast included, pool, 4-star.",
+    "Tell me hotel preferences or amenities you'd like (e.g. 'breakfast + pool').",
+    "Do you want any specific hotel amenities (pool, breakfast, breakfast + pool)?"
+  ],
+  "car": [
+    "Do you want a rental car included? (yes/no)",
+    "Would you like to add a rental car to your package?",
+    "Should I include a car? If yes, which type (compact, SUV, etc.)?"
+  ]
+}
