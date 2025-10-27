@@ -16,15 +16,17 @@ from api_services import (
     call_gemini, 
     amadeus_search_flights,
     amadeus_search_hotels,
-    amadeus_search_attractions    )
+    amadeus_search_attractions,
+    car_search_mock    )
 from base_models import (
     ChatRequest,ParseResponse, ClarifyRequest, ClarifyResponse,
-    TravelOptionsResponse,Slots,FlightOption,HotelOption,
+    TravelOptionsResponse,FlightOption,HotelOption,
     CarOption, AttractionOption, Slots, ChatResponse
 )
 import os
 import requests
 import ulid
+import json
 from datetime import datetime
 
 load_dotenv()
@@ -35,10 +37,15 @@ app = FastAPI (
         version="1.0.0"
     )
 
+# Load rental car data once when the app starts
+with open("car_list_mock.json") as f:
+    CARS_DATA = json.load(f)
+
 # ------------------------------
 # Functions for endpoints
 # ------------------------------
 
+# Helper function to preserve slot ID
 def _strip_nones(x):
     if isinstance(x, dict):
         return {k: _strip_nones(v) for k, v in x.items() if v is not None}
@@ -185,12 +192,23 @@ def chat(request: ChatRequest):
                 attractions_list = [AttractionOption(**attr) for attr in attraction_results]
                 print(f"\n🎭 Found {len(attractions_list)} attractions.")
 
+        # --- Car Search ---
+        can_search_car = new_current_slots.car is not None
+        print(f"✅ CAN SEARCH CAR: {can_search_car} ✅")
+
+        if can_search_car:
+            print("🚗 Searching for car...")
+            car = car_search_mock(new_current_slots, CARS_DATA)
+            if car:
+                print(f"🚗 Found {car} car.")
+
         # Return TravelOptionsResponse with search results
         return TravelOptionsResponse(
             plan_id = plan_id,
             slot_id = new_current_slots.slot_id,
             flight = cheapest_flight,
             hotel = cheapest_hotel,
+            car = car,
             attractions = attractions_list,
             created_time = created_time,
             updated_time = updated_time,
@@ -223,26 +241,6 @@ def clarify(request: ClarifyRequest):
     missing_info = request.missing[0]
     return ClarifyResponse(question=missing_info_map.get(missing_info, f"Could you provide {missing_info}?"))
 
-# This endpoint now finds the CHEAPEST options and returns a single plan
-@app.post("/search_for_dev", response_model=TravelOptionsResponse)
-def search_options_for_dev(slots:Slots):
-    print("Received slots for search: ", slots.model_dump())
-
-    # Generate plan_id when the plan is generated
-    plan_id = ulid.new().str
-
-    flight_results = amadeus_search_flights(slots)
-    hotel_results = amadeus_search_hotels(slots)
-
-    return TravelOptionsResponse(
-        flights=[FlightOption(**flight) for flight in flight_results],
-        hotels=[HotelOption(**hotel) for hotel in hotel_results],
-    )
-
-# Handle parse and search options at once.
-# 1. Parse the user's natural language input
-# 2. Use ONLY "slots" data in the parsed data
-# 3. send API calls
 
 # This endpoint now finds the CHEAPEST options and returns a single plan
 @app.post("/search", response_model=TravelOptionsResponse)
@@ -322,13 +320,21 @@ def search_options(slots:Slots):
 
 
     # --- Car Search ---
+    can_search_car = slots.car is not None
+    print(f"✅ CAN SEARCH CAR: {can_search_car} ✅")
+
+    if can_search_car:
+        print("🚗 Searching for car...")
+        car_result = car_search_mock(slots, CARS_DATA)
+        if car_result:
+            print(f"🚗 Found {car_result} car.")
 
     return TravelOptionsResponse(
         plan_id = plan_id,
         slot_id = slots.slot_id,
         flight = cheapest_flight,
         hotel = cheapest_hotel,
-        # cars
+        car = car_result,
         attractions = attractions_list,
         created_time = created_time,
         updated_time = updated_time

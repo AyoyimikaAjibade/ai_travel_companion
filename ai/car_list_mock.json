@@ -1,0 +1,84 @@
+{
+  "rental_cars": [
+    {
+      "company": "Enterprise",
+      "vehicle_brand": "Toyota Corolla",
+      "car_type": "Sedan - Compact",
+      "price_per_day": 42.5,
+      "currency": "USD",
+      "link": "https://www.enterprise.com/en/car-rental/vehicles/us/cars/compact.html"
+    },
+    {
+      "company": "Hertz",
+      "vehicle_brand": "Honda Accord",
+      "car_type": "Sedan - Standard",
+      "price_per_day": 55.0,
+      "currency": "USD",
+      "link": "https://www.hertz.com/rentacar/vehicle-guide"
+    },
+    {
+      "company": "Avis",
+      "vehicle_brand": "Hyundai Kona",
+      "car_type": "SUV - Compact",
+      "price_per_day": 63.0,
+      "currency": "USD",
+      "link": "https://www.avis.com/en/vehicles/us"
+    },
+    {
+      "company": "Budget",
+      "vehicle_brand": "Ford Edge",
+      "car_type": "SUV - Standard",
+      "price_per_day": 75.5,
+      "currency": "USD",
+      "link": "https://www.budget.com/en/vehicles/us"
+    },
+    {
+      "company": "Alamo",
+      "vehicle_brand": "Chevrolet Tahoe",
+      "car_type": "SUV - Full",
+      "price_per_day": 98.0,
+      "currency": "USD",
+      "link": "https://www.alamo.com/en/car-types/suv.html"
+    },
+    {
+      "company": "National",
+      "vehicle_brand": "Jeep Grand Cherokee",
+      "car_type": "SUV - Full",
+      "price_per_day": 105.0,
+      "currency": "USD",
+      "link": "https://www.nationalcar.com/en/car-types/suv.html"
+    },
+    {
+      "company": "Sixt",
+      "vehicle_brand": "Chrysler Pacifica",
+      "car_type": "Minivan",
+      "price_per_day": 89.5,
+      "currency": "USD",
+      "link": "https://www.sixt.com/fleet/minivan/"
+    },
+    {
+      "company": "Fox Rent A Car",
+      "vehicle_brand": "Toyota Sienna",
+      "car_type": "Minivan",
+      "price_per_day": 92.0,
+      "currency": "USD",
+      "link": "https://www.foxrentacar.com/en/rental-cars.html"
+    },
+    {
+      "company": "Dollar",
+      "vehicle_brand": "Ford Ranger",
+      "car_type": "Pickup Truck",
+      "price_per_day": 87.0,
+      "currency": "USD",
+      "link": "https://www.dollar.com/Cars/VehicleGuide"
+    },
+    {
+      "company": "Thrifty",
+      "vehicle_brand": "Chevrolet Silverado",
+      "car_type": "Pickup Truck",
+      "price_per_day": 90.0,
+      "currency": "USD",
+      "link": "https://www.thrifty.com/Cars/VehicleGuide"
+    }
+  ]
+}
