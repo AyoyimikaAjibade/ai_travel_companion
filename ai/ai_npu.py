@@ -20,10 +20,12 @@ from api_services import (
 from base_models import (
     ChatRequest,ParseResponse, ClarifyRequest, ClarifyResponse,
     TravelOptionsResponse,Slots,FlightOption,HotelOption,
-    CarOption, AttractionOption, Slots
+    CarOption, AttractionOption, Slots, ChatResponse
 )
 import os
 import requests
+import ulid
+from datetime import datetime
 
 load_dotenv()
 
@@ -72,45 +74,132 @@ def root():
 def health():
     return {"Live": True, "mode": "AI"}
 
-# Parse the user's request (natural language text)
-@app.post("/chat", response_model = ParseResponse)
+
+# Parse the user's request (natural language text) and optionally search for travel options
+@app.post("/chat", response_model = ChatResponse)
 def chat(request: ChatRequest):
     """
-    Parses the user's natural language message to fill or update travel slots.
-    - For initial requests, just provide the 'message'.
-    - For revisions, provide the new 'message' and the 'current_slots' from the existing plan.
+    Enhanced chat endpoint that handles both parsing and searching:
+    - Parses the user's natural language message to fill or update travel slots
+    - If all required information is provided (missing list is empty), automatically searches for travel options
+    - If information is missing, returns ParseResponse to ask for clarification
+    - For revisions, preserves slot_id and detects when user is modifying existing complete slots
 
     FE sends: { message, current_slots }
-    BE returns: { slots, missing }
-    - Generate slot_id on first request
-    - Preserve slot_id across all revisions
+    BE returns: 
+    - ParseResponse { slots, missing, reply } if information is missing
+    - TravelOptionsResponse { plan_id, slot_id, flight, hotel, attractions, timestamps } if complete
+    
+    Revision Detection:
+    - Detects revisions by checking if current_slots already contains complete travel information
+    - For both new plans and revisions: generates new plan_id and timestamps
+    - Preserves slot_id across all interactions for conversation continuity
     """
-    # The call_gemini function should be adapted to handle current_slots for context
-    # For example, the prompt could be:
-    # "Given the existing travel plan {current_slots}, update it based on the following message: {message}"
 
     # 1) Normalize current slots & guarantee slot_id
     current_slots = request.current_slots or Slots()  # Slots validator auto-assigns slot_id
-    # (If FE sent slot_id:null, validator also assigns a new id)
+                                                      # If FE sent slot_id:null, validator also assigns a new id
 
     # 2) LLM revise/fill and read parsed fields
     result = call_gemini(request.message, current_slots)
 
     slots_dict = result.get("current_slots", {})
     missing = result.get("missing", [])
-    # confidence = result.get("confidence", {})
+    reply = result.get("reply", " ")
+    # Ensure reply is always a string, not a list
+    if isinstance(reply, list):
+        reply = " ".join(reply) if reply else " "
 
-    # If missing is exist, then return current slots and missing. Otherwise, call APIs
-    # 3) Merge LLM slots into current slots, but preserve slot_id
+    # 3) Merge LLM slots into current slots
     try:
         new_current_slots = merge_slots_preserve_id(current_slots, slots_dict)
     except Exception as e:
         print("SLOTS PARSE ERROR", repr(e), "payload", slots_dict)
         new_current_slots = current_slots
 
-    return ParseResponse(current_slots=new_current_slots, missing=missing)
-    # return ParseResponse(current_slots=new_current_slots, missing=missing, confidence=confidence)
-    # return ParseMissing(missing=missing)
+    # 4) Check if we have all required information
+    if not missing:
+        print("\n✅ All slots filled, proceeding with search...")
+        
+        print("\n🆕 New plan creation - first time providing complete information")
+        plan_id = ulid.new().str
+        created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        cheapest_flight : Optional[FlightOption] = None
+        cheapest_hotel : Optional[HotelOption] = None
+        car : Optional[CarOption] = None
+        attractions_list : List[AttractionOption] = []
+
+        # --- Flight Search ---
+        can_search_flights = all ([
+            new_current_slots.origin_airport_code,
+            new_current_slots.destination_airport_code,
+            new_current_slots.dates.start,
+            new_current_slots.pax.adults is not None
+        ])
+        print(f"\n✅ CAN SEARCH FLIGHTS: {can_search_flights} ✅")
+
+        if can_search_flights:
+            print("🛩️ Searching for flights...")
+            try:
+                flight_results = amadeus_search_flights(new_current_slots)
+                if flight_results:
+                    cheapest = min(flight_results,key=lambda x: x.get('price', float('inf')))
+                    cheapest_flight = FlightOption(**cheapest)
+                    print(f"\n✈️ Found cheapest flight: {cheapest_flight.airline} for ${cheapest_flight.price}")
+            except Exception as e:
+                print("🔴 Flight search failed 🔴: ", repr(e))
+
+        # --- Hotel Search ---
+        can_search_hotels = all([
+            new_current_slots.hotel.request,    # if user didn't want a hotel, this will be false and hotel search will be skipped
+            new_current_slots.destination_city_code,    
+            new_current_slots.dates.start, new_current_slots.dates.end,
+            new_current_slots.pax.adults is not None
+        ])
+        
+        if can_search_hotels:
+            print(f"\n✅ CAN SEARCH HOTELS: {can_search_hotels} ✅")
+            print("🏨 Searching for hotels...")
+
+            try:
+                hotel_results = amadeus_search_hotels(new_current_slots)
+                if hotel_results:
+                    cheapest = hotel_results[0]
+                    cheapest_hotel = HotelOption(**cheapest)
+                    print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and flat price is {cheapest_hotel.price_per_night}{cheapest_hotel.currency}\n")
+            except Exception as e:
+                print("🔴 Hotel search failed 🔴: ", repr(e))
+        else:
+            print(f"\n✅ HOTEL SEARCH IS SKIPPED ✅")
+
+        # --- Attraction Search ---
+        can_search_attractions = new_current_slots.destination_city_code is not None
+        print(f"\n✅ CAN SEARCH ATTRACTIONS: {can_search_attractions} ✅")
+
+        if can_search_attractions:
+            print("🎭 Searching for attractions...")
+            attraction_results = amadeus_search_attractions(new_current_slots)
+            if attraction_results:
+                attractions_list = [AttractionOption(**attr) for attr in attraction_results]
+                print(f"\n🎭 Found {len(attractions_list)} attractions.")
+
+        # Return TravelOptionsResponse with search results
+        return TravelOptionsResponse(
+            plan_id = plan_id,
+            slot_id = new_current_slots.slot_id,
+            flight = cheapest_flight,
+            hotel = cheapest_hotel,
+            attractions = attractions_list,
+            created_time = created_time,
+            updated_time = updated_time,
+            reply = reply
+        )
+    else:
+        # Information is missing - return ParseResponse to ask for clarification
+        print(f"❌ Missing information: {missing}")
+        return ParseResponse(current_slots=new_current_slots, missing=missing, reply=reply)
 
 @app.post("/clarify", response_model=ClarifyResponse)
 def clarify(request: ClarifyRequest):
@@ -139,6 +228,9 @@ def clarify(request: ClarifyRequest):
 def search_options_for_dev(slots:Slots):
     print("Received slots for search: ", slots.model_dump())
 
+    # Generate plan_id when the plan is generated
+    plan_id = ulid.new().str
+
     flight_results = amadeus_search_flights(slots)
     hotel_results = amadeus_search_hotels(slots)
 
@@ -162,6 +254,11 @@ def search_options(slots:Slots):
 
     print("✅ Received slots for search: ", slots.model_dump_json(indent=2))
 
+    # Generate plan_id when the plan is generated
+    plan_id = ulid.new().str
+    created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     cheapest_flight : Optional[FlightOption] = None
     cheapest_hotel : Optional[HotelOption] = None
     car : Optional[CarOption] = None
@@ -205,7 +302,8 @@ def search_options(slots:Slots):
                 cheapest = hotel_results[0]
                 #cheapest = min(hotel_results, key=lambda x: x.get('price_per_night', float('inf')))
                 cheapest_hotel = HotelOption(**cheapest)
-                print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and total price is ${cheapest_hotel.total_price}\n")
+                # print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and total price is ${cheapest_hotel.total_price}\n")
+                print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and flat price is {cheapest_hotel.price_per_night}{cheapest_hotel.currency}\n")
         except Exception as e:
             print("🔴 Hotel search failed 🔴: ", repr(e))
     else:
@@ -226,10 +324,14 @@ def search_options(slots:Slots):
     # --- Car Search ---
 
     return TravelOptionsResponse(
+        plan_id = plan_id,
+        slot_id = slots.slot_id,
         flight = cheapest_flight,
         hotel = cheapest_hotel,
         # cars
-        attractions = attractions_list
+        attractions = attractions_list,
+        created_time = created_time,
+        updated_time = updated_time
     )
 """
 @app.post("/preference/update")
