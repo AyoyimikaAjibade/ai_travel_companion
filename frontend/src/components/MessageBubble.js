@@ -104,6 +104,7 @@ const MessageBubble = ({
         <GradientBackground
           colors={GRADIENTS.primary}
           style={styles.userBubble}
+          expand={false}
         >
           <Text style={styles.userText}>{text}</Text>
           {time && <Text style={styles.timeText}>{format(time, "HH:mm")}</Text>}
@@ -151,7 +152,8 @@ const styles = StyleSheet.create({
   // Bubbles wrap content and are width-capped
   userBubble: {
     maxWidth: "78%",
-    alignSelf: "flex-start",
+    alignSelf: "flex-end",
+    flexShrink: 1,
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.lg,
     borderBottomRightRadius: BORDER_RADIUS.xs,

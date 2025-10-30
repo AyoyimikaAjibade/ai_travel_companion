@@ -1,6 +1,16 @@
 // src/screens/PackagesScreen.js
 import React, { useState, useEffect } from "react";
-import { View, FlatList, StyleSheet, RefreshControl } from "react-native";
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  RefreshControl,
+  Text,
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import PackageCard from "../components/PackageCard";
 import EmptyState from "../components/EmptyState";
 import LoadingSkeleton from "../components/LoadingSkeleton";
@@ -99,6 +109,7 @@ const MOCK_PACKAGES = {
 };
 
 const PackagesScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [packages, setPackages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
@@ -129,67 +140,102 @@ const PackagesScreen = ({ navigation }) => {
     navigation.navigate("PackageDetails", { package: packageData });
   };
 
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        <LoadingSkeleton height={200} style={styles.skeletonItem} />
-        <LoadingSkeleton height={200} style={styles.skeletonItem} />
-        <LoadingSkeleton height={200} style={styles.skeletonItem} />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <EmptyState
-        title="Oops, something went wrong"
-        description="We couldn't load the packages. Please try again later."
-      />
-    );
-  }
+  const renderSkeleton = () => (
+    <View style={styles.skeletonContainer}>
+      <LoadingSkeleton height={200} style={styles.skeletonItem} />
+      <LoadingSkeleton height={200} style={styles.skeletonItem} />
+      <LoadingSkeleton height={200} style={styles.skeletonItem} />
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      {packages.length === 0 ? (
-        <EmptyState
-          title="No packages yet"
-          description="Start a chat to find travel packages tailored to your preferences."
-        />
-      ) : (
-        <FlatList
-          data={packages}
-          renderItem={({ item }) => (
-            <PackageCard
-              title={item.title}
-              total={item.total}
-              score={item.score}
-              bullets={item.bullets}
-              onPress={() => handlePackagePress(item)}
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <View style={[styles.container, { paddingTop: insets.top ? SPACING.sm : SPACING.lg }]}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Suggested packages</Text>
+          <Text style={styles.subtitle}>
+            Curated bundles with flights, stays, and extras to jump-start your trip.
+          </Text>
+        </View>
+
+        {isLoading ? (
+          renderSkeleton()
+        ) : isError ? (
+          <View style={styles.emptyWrapper}>
+            <EmptyState
+              title="Oops, something went wrong"
+              description="We couldn't load the packages. Please try again later."
             />
-          )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              onRefresh={loadPackages}
-              tintColor={COLORS.primary}
+          </View>
+        ) : packages.length === 0 ? (
+          <View style={styles.emptyWrapper}>
+            <EmptyState
+              title="No packages yet"
+              description="Start a chat to find travel packages tailored to your preferences."
             />
-          }
-        />
-      )}
-    </View>
+          </View>
+        ) : (
+          <FlatList
+            data={packages}
+            renderItem={({ item }) => (
+              <PackageCard
+                title={item.title}
+                total={item.total}
+                score={item.score}
+                bullets={item.bullets}
+                onPress={() => handlePackagePress(item)}
+              />
+            )}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={loadPackages}
+                tintColor={COLORS.primary}
+              />
+            }
+          />
+        )}
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
     padding: SPACING.md,
   },
+  header: {
+    marginBottom: SPACING.lg,
+  },
+  title: {
+    color: COLORS.text,
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 26,
+  },
+  subtitle: {
+    color: "rgba(255,255,255,0.65)",
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  emptyWrapper: {
+    flex: 1,
+    justifyContent: "center",
+  },
   listContent: {
     paddingBottom: SPACING.md,
+  },
+  skeletonContainer: {
+    flex: 1,
   },
   skeletonItem: {
     marginVertical: SPACING.sm,

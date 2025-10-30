@@ -11,12 +11,13 @@ import {
   Text,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Send } from "lucide-react-native";
+import { Send, Plus } from "lucide-react-native";
 import MessageBubble from "../components/MessageBubble";
 import TagChip from "../components/TagChip";
 import EmptyState from "../components/EmptyState";
-import { COLORS, SPACING } from "../theme";
+import { COLORS, SPACING, BORDER_RADIUS } from "../theme";
 import { sendMessage } from "../lib/api";
+import { useSavedChatsStore } from "../stores/savedChatsStore";
 
 import PREFILL_OPTIONS from "../data/prefill_options.json";
 import MISSING_PROMPTS from "../data/missing_prompts.json";
@@ -167,7 +168,194 @@ class ChatScreenClass extends React.Component {
     };
     this.flatListRef = React.createRef();
     this._localFillAttempts = 0;
+    this.currentChatId = null;
+    this.isApplyingChat = false;
+    this.unsubscribeFocus = null;
   }
+
+  componentDidMount() {
+    this.initializeChatSession();
+    if (this.props.navigation?.addListener) {
+      this.unsubscribeFocus = this.props.navigation.addListener(
+        "focus",
+        this.handleNavigationFocus
+      );
+    }
+  }
+
+  componentDidUpdate(prevProps, prevState) {
+    const prevChatParam = prevProps?.route?.params?.chatId;
+    const nextChatParam = this.props?.route?.params?.chatId;
+
+    if (
+      nextChatParam &&
+      nextChatParam !== prevChatParam &&
+      nextChatParam !== this.currentChatId
+    ) {
+      const loaded = this.loadChatSession(nextChatParam);
+      if (!loaded) {
+        this.startFreshChat();
+      }
+    }
+
+    const messagesChanged = prevState.messages !== this.state.messages;
+    const metaChanged =
+      prevState.sessionId !== this.state.sessionId ||
+      prevState.phase !== this.state.phase ||
+      prevState.currentSlots !== this.state.currentSlots ||
+      prevState.missing !== this.state.missing;
+
+    if (!this.isApplyingChat && (messagesChanged || metaChanged)) {
+      this.persistChatState();
+    }
+  }
+
+  componentWillUnmount() {
+    if (typeof this.unsubscribeFocus === "function") {
+      this.unsubscribeFocus();
+    }
+  }
+
+  initializeChatSession = () => {
+    const persist = useSavedChatsStore?.persist;
+    const ensure = () => this.setupChatFromStore();
+
+    if (persist?.hasHydrated?.()) {
+      ensure();
+    } else if (persist?.onFinish) {
+      persist.onFinish(ensure);
+    } else {
+      ensure();
+    }
+  };
+
+  setupChatFromStore = () => {
+    const routeChatId = this.props?.route?.params?.chatId;
+    if (routeChatId && this.loadChatSession(routeChatId)) {
+      return;
+    }
+    this.startFreshChat();
+  };
+
+  handleNavigationFocus = () => {
+    const chatId = this.props?.route?.params?.chatId;
+    if (chatId && chatId !== this.currentChatId) {
+      const loaded = this.loadChatSession(chatId);
+      if (!loaded) {
+        this.startFreshChat();
+      }
+    }
+  };
+
+  loadChatSession = (chatId) => {
+    if (!chatId) return false;
+    const storeState = useSavedChatsStore.getState();
+    const chat =
+      typeof storeState.getChatById === "function"
+        ? storeState.getChatById(chatId)
+        : null;
+    if (!chat) return false;
+    if (typeof storeState.setActiveChat === "function") {
+      storeState.setActiveChat(chatId);
+    }
+    this.applyChat(chat);
+    return true;
+  };
+
+  startFreshChat = () => {
+    const storeState = useSavedChatsStore.getState();
+    const newId = storeState.startNewChat();
+    this.currentChatId = newId;
+    const refreshed = useSavedChatsStore.getState();
+    const chat =
+      typeof refreshed.getChatById === "function"
+        ? refreshed.getChatById(newId)
+        : null;
+    if (chat) {
+      if (typeof refreshed.setActiveChat === "function") {
+        refreshed.setActiveChat(newId);
+      }
+      if (this.props?.navigation?.setParams) {
+        this.props.navigation.setParams({ chatId: undefined });
+      }
+      this.applyChat(chat);
+    }
+  };
+
+  handleNewChat = () => {
+    this.startFreshChat();
+  };
+
+  applyChat = (chat) => {
+    if (!chat) return;
+    this.currentChatId = chat.id;
+    const messages = Array.isArray(chat.messages)
+      ? chat.messages.map((msg) => ({
+          ...msg,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+        }))
+      : [];
+
+    this.isApplyingChat = true;
+    this.setState(
+      {
+        messages,
+        message: "",
+        isTyping: false,
+        phase: chat.phase ?? "idle",
+        sessionId: chat.sessionId ?? null,
+        currentSlots: chat.currentSlots ?? null,
+        missing: Array.isArray(chat.missing) ? chat.missing : [],
+      },
+      () => {
+        this.isApplyingChat = false;
+        this.scrollToEndSmooth();
+      }
+    );
+  };
+
+  persistChatState = () => {
+    const storeState = useSavedChatsStore.getState();
+    const { messages, sessionId, phase, currentSlots, missing } = this.state;
+
+    let chatId = this.currentChatId;
+    let chat =
+      chatId && typeof storeState.getChatById === "function"
+        ? storeState.getChatById(chatId)
+        : null;
+
+    if (!chat) {
+      const newId = storeState.startNewChat();
+      chatId = newId;
+      this.currentChatId = newId;
+      const refreshed = useSavedChatsStore.getState();
+      chat =
+        typeof refreshed.getChatById === "function"
+          ? refreshed.getChatById(chatId)
+          : null;
+    } else if (typeof storeState.setActiveChat === "function") {
+      storeState.setActiveChat(chatId);
+    }
+
+    const sanitizedMessages = (Array.isArray(messages) ? messages : [])
+      .filter((msg) => !msg.isTyping)
+      .map((msg) => ({
+        ...msg,
+        timestamp:
+          msg.timestamp instanceof Date
+            ? msg.timestamp.toISOString()
+            : new Date(msg.timestamp ?? Date.now()).toISOString(),
+      }));
+
+    useSavedChatsStore
+      .getState()
+      .updateChatContent(chatId, sanitizedMessages, {
+        sessionId,
+        phase,
+        currentSlots,
+        missing,
+      });
+  };
 
   generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -183,8 +371,13 @@ class ChatScreenClass extends React.Component {
     if (!newMessage || typeof newMessage !== "object") return;
     const messageWithId = {
       ...newMessage,
-      id: newMessage.id || this.generateId(),
-      timestamp: newMessage.timestamp || new Date(),
+      id: newMessage.id ? String(newMessage.id) : this.generateId(),
+      timestamp:
+        newMessage.timestamp instanceof Date
+          ? newMessage.timestamp
+          : newMessage.timestamp
+          ? new Date(newMessage.timestamp)
+          : new Date(),
     };
     this.setState(
       (prev) => ({ messages: [...prev.messages, messageWithId] }),
@@ -470,6 +663,18 @@ class ChatScreenClass extends React.Component {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <View style={styles.container}>
+          <View style={styles.headerBar}>
+            <Text style={styles.headerTitle}>Plan a trip</Text>
+            <TouchableOpacity
+              style={styles.newChatBtn}
+              onPress={this.handleNewChat}
+              activeOpacity={0.88}
+            >
+              <Plus size={18} color="#fff" />
+              <Text style={styles.newChatText}>New chat</Text>
+            </TouchableOpacity>
+          </View>
+
           {messages.length === 0 ? (
             <View style={styles.emptyWrap}>
               <EmptyState
@@ -496,7 +701,7 @@ class ChatScreenClass extends React.Component {
 
           {/* Footer */}
           <SafeAreaView edges={["bottom"]} style={styles.footerSafe}>
-            <View style={styles.quickChips}>
+            {/* <View style={styles.quickChips}>
               {QUICK_CHIPS.map((chip, index) => (
                 <TagChip
                   key={index}
@@ -504,7 +709,7 @@ class ChatScreenClass extends React.Component {
                   onPress={() => this.handleQuickChip(chip)}
                 />
               ))}
-            </View>
+            </View> */}
 
             <View style={styles.inputContainer}>
               <TextInput
@@ -543,6 +748,35 @@ class ChatScreenClass extends React.Component {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1, backgroundColor: COLORS.background },
+  headerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.sm,
+  },
+  headerTitle: {
+    color: COLORS.text,
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 20,
+  },
+  newChatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: "rgba(124,58,237,0.28)",
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.45)",
+    gap: 6,
+  },
+  newChatText: {
+    color: "#fff",
+    fontFamily: "Urbanist_600SemiBold",
+    fontSize: 14,
+  },
 
   messagesList: { flex: 1 },
   messagesContainer: {

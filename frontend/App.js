@@ -30,6 +30,10 @@ import FakePayment from "./src/screens/FakePayment";
 import ExpediaCheckoutClone from "./src/screens/ExpediaCheckoutClone";
 import BookingCheckoutClone from "./src/screens/BookingCheckoutClone";
 import GenericCheckout from "./src/screens/GenericCheckout";
+import SignupScreen from "./src/screens/SignupScreen";
+import LoginScreen from "./src/screens/LoginScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
+
 // Icons
 import { MessageCircle, Package, Luggage, Settings } from "lucide-react-native";
 
@@ -137,6 +141,9 @@ export default function App() {
             component={BookingCheckoutClone}
           />
           <Stack.Screen name="GenericCheckout" component={GenericCheckout} />
+          <Stack.Screen name="Signup" component={SignupScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
