@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   StyleSheet,
   Modal,
@@ -20,6 +20,7 @@ import EmptyState from "../components/EmptyState";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { COLORS, SPACING, BORDER_RADIUS } from "../theme";
 import { useSavedChatsStore } from "../stores/savedChatsStore";
+import { formatCurrency } from "../utils/format";
 
 const MyTripsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -48,15 +49,24 @@ const MyTripsScreen = ({ navigation }) => {
     }
   }, []);
 
-  const sortedChats = useMemo(() => {
+  const sections = useMemo(() => {
     if (!Array.isArray(chats)) return [];
-    return chats
+
+    const sorted = chats
       .filter((chat) => !chat.ephemeral)
       .sort((a, b) => {
         const aDate = new Date(a?.updatedAt || a?.createdAt || 0).getTime();
         const bDate = new Date(b?.updatedAt || b?.createdAt || 0).getTime();
         return bDate - aDate;
       });
+
+    const booked = sorted.filter((chat) => chat.status === "booked");
+    const saved = sorted.filter((chat) => chat.status !== "booked");
+
+    const list = [];
+    if (booked.length) list.push({ title: "Booked Trips", data: booked });
+    if (saved.length) list.push({ title: "Saved Trips", data: saved });
+    return list;
   }, [chats]);
 
   const openRename = (chat) => {
@@ -101,7 +111,14 @@ const MyTripsScreen = ({ navigation }) => {
 
   const handleContinue = (chat) => {
     setActiveChat(chat.id);
-    navigation.navigate("Chat", { chatId: chat.id });
+    if (chat.status === "booked" && chat.booking) {
+      navigation.navigate("BookingConfirmation", {
+        chatId: chat.id,
+        booking: chat.booking,
+      });
+    } else {
+      navigation.navigate("Chat", { chatId: chat.id });
+    }
   };
 
   const renderTrip = ({ item }) => {
@@ -109,6 +126,17 @@ const MyTripsScreen = ({ navigation }) => {
     const updatedLabel = updatedAt
       ? formatDistanceToNow(new Date(updatedAt), { addSuffix: true })
       : "Recently";
+    const isBooked = item.status === "booked";
+    const bookingInfo = item.booking || {};
+    const confirmedLabel = bookingInfo.confirmedAt
+      ? formatDistanceToNow(new Date(bookingInfo.confirmedAt), {
+          addSuffix: true,
+        })
+      : null;
+    const amountLabel =
+      bookingInfo.amount != null
+        ? formatCurrency(bookingInfo.amount, bookingInfo.currency ?? "USD")
+        : null;
 
     return (
       <View style={styles.tripCard}>
@@ -132,12 +160,25 @@ const MyTripsScreen = ({ navigation }) => {
           </View>
         </View>
 
-        <Text style={styles.tripMeta}>Updated {updatedLabel}</Text>
+        <Text style={styles.tripMeta}>
+          {isBooked
+            ? `Booked ${confirmedLabel ?? "recently"}`
+            : `Updated ${updatedLabel}`}
+        </Text>
+
         <Text style={styles.tripPreview}>
-          {item.preview?.length
+          {isBooked
+            ? `${bookingInfo.provider ?? "Travel partner"} • ${
+                bookingInfo.type ?? "Booking"
+              }`
+            : item.preview?.length
             ? item.preview
             : "Continue the conversation to build this itinerary."}
         </Text>
+
+        {isBooked && amountLabel && (
+          <Text style={styles.bookingAmount}>Total paid: {amountLabel}</Text>
+        )}
 
         <TouchableOpacity
           style={styles.continueBtn}
@@ -145,7 +186,9 @@ const MyTripsScreen = ({ navigation }) => {
           activeOpacity={0.88}
         >
           <MessageCircle size={18} color="#fff" />
-          <Text style={styles.continueText}>Continue chat</Text>
+          <Text style={styles.continueText}>
+            {isBooked ? "View booking" : "Continue chat"}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -166,13 +209,13 @@ const MyTripsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={[styles.container, { paddingTop: insets.top ? SPACING.sm : SPACING.lg }]}>
         <View style={styles.header}>
-          <Text style={styles.title}>Saved trips</Text>
+          <Text style={styles.title}>Your trips</Text>
           <Text style={styles.subtitle}>
-            Pick up where you left off or rename plans for quick reference.
+            Continue planning or revisit bookings you’ve already confirmed.
           </Text>
         </View>
 
-        {sortedChats.length === 0 ? (
+        {sections.length === 0 ? (
           <View style={styles.emptyWrapper}>
             <EmptyState
               title="No saved trips yet"
@@ -180,54 +223,58 @@ const MyTripsScreen = ({ navigation }) => {
             />
           </View>
         ) : (
-          <FlatList
-            data={sortedChats}
+          <SectionList
+            sections={sections}
             renderItem={renderTrip}
             keyExtractor={(item) => item.id}
+            renderSectionHeader={({ section }) => (
+              <Text style={styles.sectionHeader}>{section.title}</Text>
+            )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
           />
         )}
 
-      <Modal
-        visible={renameVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeRename}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Rename trip</Text>
-            <Text style={styles.modalSubtitle}>
-              Give this saved conversation a memorable name.
-            </Text>
-            <TextInput
-              value={renameValue}
-              onChangeText={setRenameValue}
-              placeholder="Trip name"
-              placeholderTextColor="rgba(255,255,255,0.45)"
-              style={styles.modalInput}
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalCancel]}
-                onPress={closeRename}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSubmit]}
-                onPress={submitRename}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalButtonText}>Save</Text>
-              </TouchableOpacity>
+        <Modal
+          visible={renameVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeRename}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Rename trip</Text>
+              <Text style={styles.modalSubtitle}>
+                Give this saved conversation a memorable name.
+              </Text>
+              <TextInput
+                value={renameValue}
+                onChangeText={setRenameValue}
+                placeholder="Trip name"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                style={styles.modalInput}
+                autoFocus
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalCancel]}
+                  onPress={closeRename}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalSubmit]}
+                  onPress={submitRename}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -263,6 +310,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: SPACING.lg,
+  },
+  sectionHeader: {
+    color: COLORS.text,
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 18,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   tripCard: {
     backgroundColor: "rgba(255,255,255,0.07)",
@@ -311,6 +365,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: SPACING.md,
+  },
+  bookingAmount: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    marginBottom: SPACING.sm,
   },
   continueBtn: {
     flexDirection: "row",

@@ -1,9 +1,9 @@
 // lib/api.js
-let API_BASE = "http://localhost:3000"; // change to your dev IP as needed
+let CHAT_ENDPOINT = "http://148.100.79.191:8000/chat";
 const AUTH_BASE = "http://148.100.78.58:8000/api/v1";
 
 export function setApiBaseUrl(url) {
-  API_BASE = url;
+  CHAT_ENDPOINT = url ? `${url.replace(/\/$/, "")}/chat` : CHAT_ENDPOINT;
 }
 
 /**
@@ -14,20 +14,30 @@ export async function sendMessage({
   message,
   phase = "idle",
   sessionId = null,
-  slots = {},
+  currentSlots = null,
 } = {}) {
   if (typeof message !== "string") {
     throw new Error("sendMessage requires { message: string }");
   }
 
-  const endpoint = `${API_BASE.replace(/\/$/, "")}/message`;
-  const body = { message, phase, sessionId, slots };
+  const body = {
+    message,
+    phase,
+    session_id: sessionId,
+    current_slots: currentSlots,
+  };
 
-  const res = await fetch(endpoint, {
+  const res = await fetch(CHAT_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+  if (!res.ok) {
+    console.warn(
+      `[chat] Unexpected response: ${res.status} ${res.statusText}`
+    );
+  }
 
   return parseJsonResponse(res);
 }

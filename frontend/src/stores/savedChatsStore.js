@@ -209,6 +209,8 @@ export const useSavedChatsStore = create(
           currentSlots: null,
           missing: [],
           ephemeral: !trimmedTitle,
+          status: "draft",
+          booking: null,
         };
         set((state) => ({
           chats: [chat, ...state.chats.filter((c) => !c.ephemeral)],
@@ -268,7 +270,16 @@ export const useSavedChatsStore = create(
                 ? meta.missing
                 : existing.missing ?? [],
               ephemeral: !meaningful && !userRenamed,
+              status: meta.status ?? existing.status ?? "draft",
+              booking:
+                meta.booking !== undefined
+                  ? meta.booking
+                  : existing.booking ?? null,
             };
+
+            if (updated.status === "booked") {
+              updated.ephemeral = false;
+            }
 
             chats[index] = updated;
             return { chats, currentChatId: id };
@@ -299,7 +310,13 @@ export const useSavedChatsStore = create(
             currentSlots: meta.currentSlots ?? null,
             missing: Array.isArray(meta.missing) ? meta.missing : [],
             ephemeral: !meaningful && !userRenamed,
+            status: meta.status ?? "draft",
+            booking: meta.booking ?? null,
           };
+
+          if (newChat.status === "booked") {
+            newChat.ephemeral = false;
+          }
 
           return {
             chats: [newChat, ...chats.filter((chat) => chat.id !== id)],
@@ -322,6 +339,26 @@ export const useSavedChatsStore = create(
                     typeof meta.ephemeral === "boolean"
                       ? meta.ephemeral
                       : chat.ephemeral,
+                  status: meta.status ?? chat.status ?? "draft",
+                  booking:
+                    meta.booking !== undefined
+                      ? meta.booking
+                      : chat.booking ?? null,
+                }
+              : chat
+          ),
+        })),
+
+      markChatBooked: (id, booking = null) =>
+        set((state) => ({
+          chats: state.chats.map((chat) =>
+            chat.id === id
+              ? {
+                  ...chat,
+                  status: "booked",
+                  booking,
+                  ephemeral: false,
+                  updatedAt: new Date().toISOString(),
                 }
               : chat
           ),

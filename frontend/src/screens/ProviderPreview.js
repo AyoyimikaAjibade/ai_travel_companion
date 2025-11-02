@@ -5,6 +5,11 @@ import ExpediaCheckoutClone from "./ExpediaCheckoutClone";
 import BookingCheckoutClone from "./BookingCheckoutClone";
 import GenericCheckout from "./GenericCheckout";
 
+const isFlight = (type = "") =>
+  ["flight", "flights", "air", "airfare"].includes(type?.toLowerCase?.());
+const isHotel = (type = "") =>
+  ["hotel", "stay", "accommodation"].includes(type?.toLowerCase?.());
+
 export default function ProviderPreview({ route, navigation }) {
   const {
     provider = "Provider",
@@ -12,17 +17,10 @@ export default function ProviderPreview({ route, navigation }) {
     type = "item",
     currency,
   } = route.params || {};
-  const key = (provider || "").toLowerCase();
 
-  if (key.includes("booking")) {
-    return (
-      <BookingCheckoutClone
-        route={{ params: { data, currency } }}
-        navigation={navigation}
-      />
-    );
-  }
-  if (key.includes("expedia")) {
+  const providerKey = (provider || "").toLowerCase();
+
+  if (isFlight(type) || providerKey.includes("expedia")) {
     return (
       <ExpediaCheckoutClone
         route={{ params: { data, currency } }}
@@ -30,6 +28,16 @@ export default function ProviderPreview({ route, navigation }) {
       />
     );
   }
+
+  if (isHotel(type) || providerKey.includes("booking")) {
+    return (
+      <BookingCheckoutClone
+        route={{ params: { data, currency } }}
+        navigation={navigation}
+      />
+    );
+  }
+
   return (
     <GenericCheckout
       route={{ params: { provider, data, currency, type } }}

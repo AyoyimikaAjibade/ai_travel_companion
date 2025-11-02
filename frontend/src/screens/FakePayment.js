@@ -16,12 +16,23 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SPACING, COLORS } from "../theme";
 import { formatCurrency } from "../utils/format";
+import { useSavedChatsStore } from "../stores/savedChatsStore";
+import { ChevronLeft } from "lucide-react-native";
 
 export default function FakePayment({ route, navigation }) {
   const { provider, type, data } = route.params || {};
-  const mainAmount = data?.price ?? route.params?.summary?.total_price ?? 0;
-  const amount = mainAmount * 1.2;
-  const currency = data?.currency ?? route.params?.summary?.currency ?? "USD";
+  const summary = route.params?.summary ?? {};
+  const summaryTotal = summary.total_price;
+  const summaryCurrency = summary.currency;
+  const baseAmount = data?.price ?? summaryTotal ?? 0;
+  const amount = baseAmount;
+  const currency = data?.currency ?? summaryCurrency ?? "USD";
+  const fallbackSubtotal = amount / 1.15;
+  const subtotal = Math.max(summary.subtotal ?? fallbackSubtotal, 0);
+  const twosFee = Math.max(summary.twos_fee ?? amount * 0.05, 0);
+  const taxes = Math.max(summary.taxes ?? amount - subtotal - twosFee, 0);
+  const travelerInfo = data?.traveler ?? null;
+  const chatIdRef = useRef(useSavedChatsStore.getState()?.currentChatId ?? null);
 
   // UI state
   const [method, setMethod] = useState("apple"); // 'apple' | 'card' | 'paypal'
@@ -65,10 +76,57 @@ export default function FakePayment({ route, navigation }) {
       setSheetVisible(false);
       setSuccess(true);
 
+      try {
+        const store = useSavedChatsStore.getState();
+        const chatId = chatIdRef.current ?? store?.currentChatId;
+        chatIdRef.current = chatId;
+        if (chatId) {
+          const chat = store.getChatById?.(chatId);
+          if (chat) {
+            const confirmationTimestamp = new Date().toISOString();
+            const confirmationText = `✅ Booking confirmed with ${
+              provider ?? "our partner"
+            }. Your ${type ?? "booking"} is all set!`;
+            const confirmationMessage = {
+              role: "bot",
+              text: confirmationText,
+              timestamp: confirmationTimestamp,
+            };
+            const updatedMessages = [...(chat.messages || []), confirmationMessage];
+
+            const booking = {
+              provider: provider ?? "Travel Partner",
+              type: type ?? "booking",
+              amount,
+              currency,
+              data,
+              confirmedAt: confirmationTimestamp,
+              twosFee,
+              traveler: travelerInfo,
+            };
+
+            store.updateChatContent?.(chatId, updatedMessages, {
+              status: "booked",
+              booking,
+            });
+
+            setTimeout(() => {
+              resetForm();
+              navigation.replace("BookingConfirmation", {
+                chatId,
+                booking,
+              });
+            }, 900);
+            return;
+          }
+        }
+      } catch (err) {
+        if (__DEV__) console.warn("Failed to record booking", err);
+      }
+
       // small delay so user sees success state then return to chat
       setTimeout(() => {
         resetForm();
-        // replace root to Main -> Chat (same as original)
         navigation.replace("Main", { screen: "Chat" });
       }, 900);
     }, 1400);
@@ -128,6 +186,17 @@ export default function FakePayment({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.85}
+        >
+          <ChevronLeft size={20} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Secure checkout</Text>
+        <View style={{ width: 36 }} />
+      </View>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -141,7 +210,16 @@ export default function FakePayment({ route, navigation }) {
           <View style={styles.summary}>
             <Text style={styles.summaryText}>Item: {type ?? "Booking"}</Text>
             <Text style={styles.summaryText}>
-              Amount: {formatCurrency(amount, currency)}
+              Subtotal: {formatCurrency(subtotal, currency)}
+            </Text>
+            <Text style={styles.summaryText}>
+              Taxes & fees: {formatCurrency(taxes, currency)}
+            </Text>
+            <Text style={styles.summaryText}>
+              TWOS service fee (5%): {formatCurrency(twosFee, currency)}
+            </Text>
+            <Text style={styles.summaryText}>
+              Amount due: {formatCurrency(amount, currency)}
             </Text>
           </View>
 
@@ -297,6 +375,17 @@ export default function FakePayment({ route, navigation }) {
             )}
           </View>
 
+          {travelerInfo ? (
+            <View style={styles.travelerCard}>
+              <Text style={styles.sectionTitle}>Traveler</Text>
+              <Text style={styles.travelerText}>{travelerInfo.name}</Text>
+              <Text style={styles.travelerSub}>{travelerInfo.email}</Text>
+              <Text style={styles.travelerSub}>
+                {travelerInfo.countryCode} {travelerInfo.phone}
+              </Text>
+            </View>
+          ) : null}
+
           <View style={{ height: 40 }} />
 
           {/* Bottom notes */}
@@ -399,6 +488,27 @@ export default function FakePayment({ route, navigation }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  headerTitle: {
+    color: COLORS.text,
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 18,
+  },
   container: {
     padding: SPACING.lg,
     paddingTop: SPACING.xl,
@@ -516,6 +626,24 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 17,
     fontFamily: "Urbanist_600SemiBold",
+  },
+  travelerCard: {
+    backgroundColor: "rgba(255,255,255,0.02)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    padding: SPACING.md,
+    marginTop: SPACING.lg,
+  },
+  travelerText: {
+    color: COLORS.text,
+    fontFamily: "Urbanist_600SemiBold",
+    fontSize: 15,
+  },
+  travelerSub: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 13,
+    marginTop: 2,
   },
 
   overlay: {

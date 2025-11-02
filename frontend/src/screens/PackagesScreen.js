@@ -15,6 +15,7 @@ import PackageCard from "../components/PackageCard";
 import EmptyState from "../components/EmptyState";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import { COLORS, SPACING } from "../theme";
+import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 
 // Mock data for demonstration
 const MOCK_PACKAGES = {
@@ -110,6 +111,8 @@ const MOCK_PACKAGES = {
 
 const PackagesScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { convertCurrency, targetCurrency } = useCurrencyConverter();
+  const displayCurrency = targetCurrency || "USD";
   const [packages, setPackages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
@@ -137,7 +140,9 @@ const PackagesScreen = ({ navigation }) => {
   }, []);
 
   const handlePackagePress = (packageData) => {
-    navigation.navigate("PackageDetails", { package: packageData });
+    navigation.navigate("PackageDetails", {
+      package: packageData,
+    });
   };
 
   const renderSkeleton = () => (
@@ -177,15 +182,31 @@ const PackagesScreen = ({ navigation }) => {
         ) : (
           <FlatList
             data={packages}
-            renderItem={({ item }) => (
-              <PackageCard
-                title={item.title}
-                total={item.total}
-                score={item.score}
-                bullets={item.bullets}
-                onPress={() => handlePackagePress(item)}
-              />
-            )}
+            renderItem={({ item }) => {
+              const convertedTotal = convertCurrency(
+                item.total,
+                item.currency,
+                displayCurrency
+              );
+              const twosFee = convertedTotal * 0.05;
+              const packageWithConversion = {
+                ...item,
+                total: convertedTotal,
+                currency: displayCurrency,
+                twosFee,
+              };
+              return (
+                <PackageCard
+                  title={packageWithConversion.title}
+                  total={packageWithConversion.total}
+                  currency={displayCurrency}
+                  twosFee={packageWithConversion.twosFee}
+                  score={packageWithConversion.score}
+                  bullets={packageWithConversion.bullets}
+                  onPress={() => handlePackagePress(packageWithConversion)}
+                />
+              );
+            }}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}

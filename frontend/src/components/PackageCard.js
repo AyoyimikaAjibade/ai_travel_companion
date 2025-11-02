@@ -5,8 +5,17 @@ import GradientBackground from "./GradientBackground";
 import ScoreBadge from "./ScoreBadge";
 import TagChip from "./TagChip";
 import { COLORS, GRADIENTS, BORDER_RADIUS, SPACING } from "../theme";
+import { formatCurrency } from "../utils/format";
 
-const PackageCard = ({ title, total, score, bullets, onPress, ...props }) => {
+const PackageCard = ({
+  title,
+  total,
+  currency = "USD",
+  twosFee,
+  score,
+  bullets,
+  onPress,
+}) => {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
       <GradientBackground colors={GRADIENTS.sky} style={styles.card}>
@@ -17,7 +26,12 @@ const PackageCard = ({ title, total, score, bullets, onPress, ...props }) => {
           <ScoreBadge score={score} />
         </View>
 
-        <Text style={styles.total}>${total.toLocaleString()}</Text>
+        <Text style={styles.total}>{formatCurrency(total, currency)}</Text>
+        {twosFee != null && (
+          <Text style={styles.feeLine}>
+            Includes 5% TWOS fee ({formatCurrency(twosFee, currency)})
+          </Text>
+        )}
 
         <View style={styles.bullets}>
           {bullets.slice(0, 3).map((bullet, index) => (
@@ -32,6 +46,7 @@ const PackageCard = ({ title, total, score, bullets, onPress, ...props }) => {
           {bullets.some((b) => b.includes("non-stop")) && (
             <TagChip text="Non-stop ✈️" />
           )}
+          {twosFee != null && <TagChip text="TWOS fee applied" />}
         </View>
       </GradientBackground>
     </TouchableOpacity>
@@ -62,6 +77,11 @@ const styles = StyleSheet.create({
     fontFamily: "Urbanist_700Bold",
     fontSize: 28,
     marginBottom: SPACING.sm,
+  },
+  feeLine: {
+    color: "rgba(255,255,255,0.75)",
+    marginBottom: SPACING.sm,
+    fontSize: 12,
   },
   bullets: {
     marginBottom: SPACING.sm,

@@ -22,6 +22,82 @@ import { useSavedChatsStore } from "../stores/savedChatsStore";
 import PREFILL_OPTIONS from "../data/prefill_options.json";
 import MISSING_PROMPTS from "../data/missing_prompts.json";
 import GREETINGS from "../data/greetings.json";
+import { useSessionStore } from "../stores/sessionStore";
+
+const getSessionPreferences = () => {
+  try {
+    return useSessionStore.getState()?.preferences ?? {};
+  } catch (error) {
+    if (__DEV__) console.warn("Unable to read session preferences", error);
+    return {};
+  }
+};
+
+const getDefaultSlots = () => {
+  const prefs = getSessionPreferences();
+
+  const base = {
+    slot_id: null,
+    origin_airport_code: null,
+    destination_airport_name: null,
+    destination_airport_code: null,
+    destination_city_code: null,
+    destination_city_name: null,
+    dates: {
+      start: null,
+      end: null,
+    },
+    pax: {
+      adults: 0,
+      kids: 0,
+    },
+    budget: null,
+    hotel: {
+      request: null,
+      amenities: [],
+      rating: null,
+    },
+    car: false,
+    attractions: [],
+  };
+
+  if (prefs.breakfastIncluded) {
+    base.hotel.amenities = ["breakfast"];
+  }
+
+  if (prefs.minRating != null) {
+    const numericRating = Number(prefs.minRating);
+    base.hotel.rating = Number.isNaN(numericRating)
+      ? prefs.minRating
+      : numericRating;
+  }
+
+  if (typeof prefs.carIncluded === "boolean") {
+    base.car = prefs.carIncluded;
+  }
+
+  return base;
+};
+
+const mergeSlots = (overrides = {}) => {
+  const base = getDefaultSlots();
+  return {
+    ...base,
+    ...overrides,
+    dates: { ...base.dates, ...(overrides?.dates || {}) },
+    pax: { ...base.pax, ...(overrides?.pax || {}) },
+    hotel: {
+      ...base.hotel,
+      ...(overrides?.hotel || {}),
+      amenities: Array.isArray(overrides?.hotel?.amenities)
+        ? overrides.hotel.amenities
+        : base.hotel.amenities,
+    },
+    attractions: Array.isArray(overrides?.attractions)
+      ? overrides.attractions
+      : base.attractions,
+  };
+};
 
 /* ====== Config ====== */
 const QUICK_CHIPS = [
@@ -31,8 +107,6 @@ const QUICK_CHIPS = [
   "Non-stop flights",
   "4+ star hotels",
 ];
-
-const MAX_LOCAL_SLOT_FILL_ATTEMPTS = 3; // per message, safety
 
 /* ===== Helpers: local NLU & intents ===== */
 const normalize = (s = "") =>
@@ -61,98 +135,6 @@ function isHowAreYou(text) {
   return /\bHow are you\b|\bhow's it going\b|\bhow r u\b/.test(t);
 }
 
-// detect flight intent and extract simple things if possible
-function detectFlightIntent(text) {
-  if (!text) return null;
-  const t = normalize(text);
-  if (
-    !/\b(book|want to book|i want to fly|i want to go|i want to travel|flight|fly|book flight)\b/.test(
-      t
-    )
-  )
-    return null;
-
-  // try to capture "from X to Y"
-  const route = text.match(
-    /from\s+([a-zA-Z\s\.\,]+?)\s+(?:to|->|[-|→])\s+([a-zA-Z\s\.\,]+)/i
-  );
-  if (route) {
-    const origin = route[1].trim();
-    const dest = route[2].trim();
-    return { intent: "book_flight", origin, destination: dest };
-  }
-
-  // try "to X" or "from X"
-  const toMatch = text.match(/\bto\s+([a-zA-Z\s\.\,]+)/i);
-  const fromMatch = text.match(/\bfrom\s+([a-zA-Z\s\.\,]+)/i);
-  const origin = fromMatch ? fromMatch[1].trim() : null;
-  const destination = toMatch ? toMatch[1].trim() : null;
-  return { intent: "book_flight", origin, destination };
-}
-
-// small date extractor (month names + day range)
-function extractDates(text) {
-  if (!text) return null;
-  const r1 = text.match(
-    /(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[^\d]*\s*(\d{1,2})\s*(?:[-–—to]+\s*)(\d{1,2})/i
-  );
-  if (r1) {
-    const month = r1[1];
-    const start = `${month} ${r1[2]}`;
-    const end = `${month} ${r1[3]}`;
-    return { start, end };
-  }
-  const iso = text.match(
-    /(\d{4}-\d{2}-\d{2})\s*(?:to|[-–—])\s*(\d{4}-\d{2}-\d{2})/i
-  );
-  if (iso) return { start: iso[1], end: iso[2] };
-  const single = text.match(
-    /(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s*(\d{1,2})/i
-  );
-  if (single) return { start: `${single[1]} ${single[2]}`, end: "" };
-  return null;
-}
-
-function extractPax(text) {
-  const result = { adults: null, kids: null };
-  if (!text) return result;
-  const mAdults = text.match(/(\d+)\s*(adults|adult)/i);
-  if (mAdults) result.adults = parseInt(mAdults[1], 10);
-  const mKids = text.match(/(\d+)\s*(kids|children|child)/i);
-  if (mKids) result.kids = parseInt(mKids[1], 10);
-  const mPax = text.match(/(\d+)\s*(passengers|pax)/i);
-  if (mPax && result.adults == null) result.adults = parseInt(mPax[1], 10);
-  return result;
-}
-
-function extractBudget(text) {
-  if (!text) return null;
-  const m =
-    text.match(/\$\s?([0-9,]+)/i) ||
-    text.match(/budget\s*[:\-]?\s*([0-9,]+)/i) ||
-    text.match(/(\d{3,6})\s*(usd|dollars)?/i);
-  if (!m) return null;
-  const num = m[1].replace(/,/g, "");
-  return parseInt(num, 10);
-}
-
-// Quick city/airport heuristic using PREFILL_OPTIONS lists
-function detectCityOrAirport(text) {
-  if (!text) return null;
-  const t = text.toLowerCase();
-  for (const key of [
-    "origin_airport_code",
-    "destination_airport_code",
-    "destination_city_code",
-  ]) {
-    const arr = PREFILL_OPTIONS[key] || [];
-    for (const candidate of arr) {
-      if (candidate && t.includes(candidate.toLowerCase())) return candidate;
-    }
-  }
-  return null;
-}
-
 /* ===== ChatScreen component ===== */
 class ChatScreenClass extends React.Component {
   constructor(props) {
@@ -163,14 +145,18 @@ class ChatScreenClass extends React.Component {
       messages: [],
       phase: "idle",
       sessionId: null,
-      currentSlots: null,
+      currentSlots: getDefaultSlots(),
       missing: [],
+      chatStatus: "draft",
+      booking: null,
     };
     this.flatListRef = React.createRef();
     this._localFillAttempts = 0;
     this.currentChatId = null;
     this.isApplyingChat = false;
     this.unsubscribeFocus = null;
+    this.unsubscribeStore = null;
+    this.handleStoreChange = this.handleStoreChange.bind(this);
   }
 
   componentDidMount() {
@@ -181,6 +167,7 @@ class ChatScreenClass extends React.Component {
         this.handleNavigationFocus
       );
     }
+    this.unsubscribeStore = useSavedChatsStore.subscribe(this.handleStoreChange);
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -214,6 +201,45 @@ class ChatScreenClass extends React.Component {
     if (typeof this.unsubscribeFocus === "function") {
       this.unsubscribeFocus();
     }
+    if (typeof this.unsubscribeStore === "function") {
+      this.unsubscribeStore();
+    }
+  }
+
+  handleStoreChange(state) {
+    if (!this.currentChatId) return;
+    const chat =
+      state.getChatById?.(this.currentChatId) ??
+      state.chats?.find?.((c) => c.id === this.currentChatId);
+    if (!chat) return;
+    const normalizedMessages = Array.isArray(chat.messages)
+      ? chat.messages.map((msg) => ({
+          ...msg,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+        }))
+      : [];
+    const prevMessages = this.state.messages || [];
+    const hasMessagesChanged =
+      normalizedMessages.length !== prevMessages.length ||
+      (normalizedMessages.length > 0 &&
+        normalizedMessages[normalizedMessages.length - 1]?.id !==
+          prevMessages[prevMessages.length - 1]?.id);
+    if (hasMessagesChanged) {
+      this.isApplyingChat = true;
+    }
+
+    this.setState(
+      {
+        chatStatus: chat.status ?? "draft",
+        booking: chat.booking ?? null,
+        messages: hasMessagesChanged ? normalizedMessages : prevMessages,
+      },
+      () => {
+        if (hasMessagesChanged) {
+          this.isApplyingChat = false;
+        }
+      }
+    );
   }
 
   initializeChatSession = () => {
@@ -296,6 +322,11 @@ class ChatScreenClass extends React.Component {
         }))
       : [];
 
+    const storedSlots =
+      chat.currentSlots && typeof chat.currentSlots === "object"
+        ? mergeSlots(chat.currentSlots)
+        : getDefaultSlots();
+
     this.isApplyingChat = true;
     this.setState(
       {
@@ -304,8 +335,10 @@ class ChatScreenClass extends React.Component {
         isTyping: false,
         phase: chat.phase ?? "idle",
         sessionId: chat.sessionId ?? null,
-        currentSlots: chat.currentSlots ?? null,
+        currentSlots: storedSlots,
         missing: Array.isArray(chat.missing) ? chat.missing : [],
+        chatStatus: chat.status ?? "draft",
+        booking: chat.booking ?? null,
       },
       () => {
         this.isApplyingChat = false;
@@ -317,6 +350,7 @@ class ChatScreenClass extends React.Component {
   persistChatState = () => {
     const storeState = useSavedChatsStore.getState();
     const { messages, sessionId, phase, currentSlots, missing } = this.state;
+    const { chatStatus, booking } = this.state;
 
     let chatId = this.currentChatId;
     let chat =
@@ -347,13 +381,20 @@ class ChatScreenClass extends React.Component {
             : new Date(msg.timestamp ?? Date.now()).toISOString(),
       }));
 
+    const slotSnapshot =
+      currentSlots && typeof currentSlots === "object"
+        ? mergeSlots(currentSlots)
+        : getDefaultSlots();
+
     useSavedChatsStore
       .getState()
       .updateChatContent(chatId, sanitizedMessages, {
         sessionId,
         phase,
-        currentSlots,
+        currentSlots: slotSnapshot,
         missing,
+        status: chatStatus,
+        booking,
       });
   };
 
@@ -393,16 +434,20 @@ class ChatScreenClass extends React.Component {
 
   sendToServer = async (messageText) => {
     const { phase, sessionId, currentSlots } = this.state;
+    const slotsPayload =
+      currentSlots && typeof currentSlots === "object"
+        ? mergeSlots(currentSlots)
+        : getDefaultSlots();
     const payload = {
       message: messageText,
       phase,
       sessionId,
-      slots: currentSlots || {},
+      currentSlots: slotsPayload,
     };
     return sendMessage(payload);
   };
 
-  // Local handler: greetings and simple flight intent
+  // Local handler: greetings and small talk
   handleLocalIntents = (rawText) => {
     const text = (rawText || "").trim();
     if (!text) return false;
@@ -423,93 +468,6 @@ class ChatScreenClass extends React.Component {
       const arr = GREETINGS.how_are_you || ["I'm good — ready to help!"];
       const reply = arr[Math.floor(Math.random() * arr.length)];
       this.addMessage({ role: "bot", text: reply });
-      this.setState({ message: "" });
-      return true;
-    }
-
-    // Flight intent
-    const flight = detectFlightIntent(text);
-    if (flight && flight.intent === "book_flight") {
-      this.addMessage({ role: "user", text });
-
-      // Build starting slots
-      const baseSlots = {
-        origin_airport_code: "",
-        destination_airport_code: "",
-        destination_city_code: "",
-        dates: { start: "", end: "" },
-        pax: { adults: null, kids: null },
-        budget: null,
-        hotel: { amenities: [] },
-        car: null,
-      };
-
-      // Fill origin/destination if detected
-      if (flight.origin) {
-        const found = detectCityOrAirport(flight.origin) || flight.origin;
-        baseSlots.origin_airport_code = found;
-      }
-      if (flight.destination) {
-        const found =
-          detectCityOrAirport(flight.destination) || flight.destination;
-        baseSlots.destination_city_code = found;
-      }
-
-      // try to extract dates/pax/budget from the original text
-      const dates = extractDates(text);
-      if (dates)
-        baseSlots.dates = { start: dates.start || "", end: dates.end || "" };
-      const pax = extractPax(text);
-      if (pax.adults) baseSlots.pax.adults = pax.adults;
-      if (pax.kids) baseSlots.pax.kids = pax.kids;
-      const budget = extractBudget(text);
-      if (budget) baseSlots.budget = budget;
-
-      // decide missing order
-      const missingOrder = [];
-      if (!baseSlots.origin_airport_code)
-        missingOrder.push("origin_airport_code");
-      if (
-        !baseSlots.destination_airport_code &&
-        !baseSlots.destination_city_code
-      )
-        missingOrder.push("destination_airport_code");
-      if (!baseSlots.dates || !baseSlots.dates.start || !baseSlots.dates.end)
-        missingOrder.push("dates");
-      if (!baseSlots.pax || !baseSlots.pax.adults) missingOrder.push("pax");
-      if (!baseSlots.budget) missingOrder.push("budget");
-
-      // update state and ask for the first missing with prompt
-      this.setState(
-        { currentSlots: baseSlots, missing: missingOrder, isTyping: false },
-        () => {
-          if (missingOrder.length > 0) {
-            const first = missingOrder[0];
-            const prompts = MISSING_PROMPTS[first] || [];
-            const botPrompt = prompts.length
-              ? prompts[0]
-              : `Please provide ${first}.`;
-            this.addMessage({ role: "bot", text: botPrompt });
-          } else {
-            // If nothing missing locally, call server to get package
-            this.addMessage({ role: "bot", isTyping: true });
-            this.setState({ isTyping: true }, async () => {
-              try {
-                const resp = await this.sendToServer(text);
-                await this._processServerResponse(resp);
-              } catch (err) {
-                this.removeTypingIndicators();
-                this.addMessage({
-                  role: "bot",
-                  text: "Sorry — couldn't reach the server. Check API URL in lib/api.js.",
-                });
-                this.setState({ isTyping: false });
-              }
-            });
-          }
-        }
-      );
-
       this.setState({ message: "" });
       return true;
     }
@@ -549,60 +507,76 @@ class ChatScreenClass extends React.Component {
   _processServerResponse = async (resp) => {
     this.removeTypingIndicators();
 
+    const rawSlots =
+      (resp && (resp.current_slots ?? resp.currentSlots ?? resp.slots)) ||
+      null;
     const slotsFromServer =
-      resp && typeof resp.slots === "object"
-        ? resp.slots
+      rawSlots && typeof rawSlots === "object"
+        ? mergeSlots(rawSlots)
         : this.state.currentSlots;
     const missingFromServer = Array.isArray(resp?.missing) ? resp.missing : [];
+    const sessionIdFromResponse =
+      resp?.session_id ?? resp?.sessionId ?? this.state.sessionId;
 
     this.setState({
       currentSlots: slotsFromServer,
       missing: missingFromServer,
       phase: resp?.nextPhase ?? this.state.phase,
-      sessionId: resp?.sessionId ?? this.state.sessionId,
+      sessionId: sessionIdFromResponse,
+      isTyping: false,
     });
 
     if (resp?.reply) {
-      // show server-provided reply (bot)
       this.addMessage({
         role: "bot",
         text: resp.reply,
-        links: resp.links || [],
+        links: Array.isArray(resp.links) ? resp.links : [],
       });
-
-      // if package returned, show as separate link message for provider previews
-      if (resp.package) {
-        this.addMessage({
-          role: "bot",
-          text: resp.reply || "Package ready — open provider previews below.",
-          links: (resp.links || []).map((l) => ({
-            label: l.label,
-            provider: l.provider,
-            type: l.type,
-            payload: l.payload || l,
-          })),
-        });
-      }
-
-      this.setState({ isTyping: false, missing: [] });
-      return;
+    } else if (Array.isArray(resp?.links) && resp.links.length > 0) {
+      this.addMessage({
+        role: "bot",
+        text: "Here are some options you can review:",
+        links: resp.links.map((l) => ({
+          label: l.label,
+          provider: l.provider,
+          type: l.type || "link",
+          payload: l.payload || l,
+        })),
+      });
     }
 
-    // server didn't return textual reply: frontend must ask for missing slot(s)
-    if (missingFromServer.length > 0) {
+    const planData = {
+      planId: resp?.plan_id ?? resp?.planId ?? null,
+      slotId: resp?.slot_id ?? resp?.slotId ?? slotsFromServer?.slot_id ?? null,
+      flight: resp?.flight ?? null,
+      hotel: resp?.hotel ?? null,
+      car: resp?.car ?? null,
+      attractions: Array.isArray(resp?.attractions) ? resp.attractions : [],
+    };
+
+    const hasPlan =
+      planData.planId ||
+      (planData.flight && Object.keys(planData.flight || {}).length > 0) ||
+      (planData.hotel && Object.keys(planData.hotel || {}).length > 0) ||
+      (planData.car && Object.keys(planData.car || {}).length > 0) ||
+      (planData.attractions && planData.attractions.length > 0);
+
+    if (hasPlan) {
+      this.addMessage({
+        role: "bot",
+        text: resp?.plan_summary || "Booking set ready below.",
+        plan: planData,
+      });
+    }
+
+    if (!resp?.reply && missingFromServer.length > 0) {
       const firstMissing = missingFromServer[0];
       const prompts = MISSING_PROMPTS[firstMissing] || [];
       const botPrompt = prompts.length
         ? prompts[0]
         : `Please provide ${firstMissing}.`;
-
       this.addMessage({ role: "bot", text: botPrompt });
-      this.setState({ isTyping: false, missing: missingFromServer });
-      return;
     }
-
-    // fallback
-    this.setState({ isTyping: false });
   };
 
   // When user taps a suggestion chip
@@ -626,7 +600,11 @@ class ChatScreenClass extends React.Component {
         text={item.text}
         time={item.timestamp}
         links={item.links}
+        plan={item.plan}
         navigation={this.props.navigation}
+        chatId={this.currentChatId}
+        isBooked={this.state.chatStatus === "booked"}
+        booking={this.state.booking}
       />
     );
   };

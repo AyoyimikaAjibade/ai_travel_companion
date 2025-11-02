@@ -1,5 +1,5 @@
 // src/screens/BookingCheckoutClone.js
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,14 @@ import {
   Image,
   StatusBar,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SPACING } from "../theme";
 import { formatCurrency } from "../utils/format";
+import { ChevronLeft, ShieldCheck } from "lucide-react-native";
+import TravelerDetailsForm from "../components/TravelerDetailsForm";
+import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 
 const BOOKING_BLUE = "#003580";
 const BOOKING_YELLOW = "#FFB700";
@@ -21,35 +25,72 @@ const logoUri =
 
 const BookingCheckoutClone = ({ route, navigation }) => {
   const { data = {}, currency = "USD" } = route.params || {};
-  const price = Number(data?.price ?? 360);
-  const taxes = Number(data?.taxes ?? 40);
-  const finalTax = Number(price * 0.2);
-  const total = price + finalTax;
+  const { convertCurrency, targetCurrency } = useCurrencyConverter();
+  const displayCurrency = targetCurrency || currency;
+  const basePrice = Number(data?.price ?? 360);
+  const subtotal = convertCurrency(basePrice, currency, displayCurrency);
+  const taxes = subtotal * 0.18;
+  const twosFee = subtotal * 0.05;
+  const total = subtotal + taxes + twosFee;
+  const [traveler, setTraveler] = useState({
+    name: data.traveler ?? "",
+    email: data.email ?? "",
+    countryCode: data.countryCode ?? "+1",
+    phone: data.phone ?? "",
+  });
+  const travelerValid =
+    traveler.name.trim().length > 0 &&
+    traveler.email.trim().length > 0 &&
+    traveler.phone.trim().length >= 6;
 
   const handlePay = () => {
+    if (!travelerValid) {
+      Alert.alert(
+        "Traveler details",
+        "Please complete traveler information before continuing."
+      );
+      return;
+    }
     navigation.navigate("FakePayment", {
       provider: "Booking.com",
       type: "hotel",
-      data,
+      data: {
+        ...data,
+        traveler,
+        price: subtotal,
+        currency: displayCurrency,
+      },
+      summary: {
+        total_price: total,
+        currency: displayCurrency,
+        taxes,
+        twos_fee: twosFee,
+        subtotal,
+      },
     });
   };
 
   return (
     // root must fill the screen
     <View style={styles.root}>
-      {/* ensure status bar contrasts with header color */}
       <StatusBar barStyle="light-content" backgroundColor={BOOKING_BLUE} />
 
-      {/* Top safe area (blue) — keep height only for notch/status */
-      /* this area will NOT flex; headerInner below will size itself */}
       <SafeAreaView style={styles.safeTop} edges={["top"]}>
         <View style={styles.headerWrap}>
           <View style={styles.headerInner}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.85}
+            >
+              <ChevronLeft size={20} color="#fff" />
+            </TouchableOpacity>
             <Image
               source={{ uri: logoUri }}
               style={styles.logo}
               resizeMode="contain"
             />
+            <View style={{ width: 36 }} />
           </View>
         </View>
       </SafeAreaView>
@@ -75,9 +116,15 @@ const BookingCheckoutClone = ({ route, navigation }) => {
               <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                 <Text style={styles.hotelName}>{data.name ?? "Souq View"}</Text>
                 <Text style={styles.hotelMeta}>
-                  ⭐ {data.rating ?? 4.4} • Breakfast + Pool
+                  ⭐ {data.rating ?? 4.4} • Breakfast included
                 </Text>
               </View>
+            </View>
+            <View style={styles.badgeRow}>
+              <ShieldCheck size={16} color={BOOKING_YELLOW} />
+              <Text style={styles.badgeText}>
+                Free cancellation until {data.freeCancelUntil ?? "24 hours before arrival"}
+              </Text>
             </View>
           </View>
 
@@ -86,15 +133,15 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             <Text style={styles.sectionTitle}>Stay details</Text>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Check-in</Text>
-              <Text style={styles.detailValue}>Nov 10</Text>
+              <Text style={styles.detailValue}>{data.checkIn ?? "Nov 10"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Check-out</Text>
-              <Text style={styles.detailValue}>Nov 15</Text>
+              <Text style={styles.detailValue}>{data.checkOut ?? "Nov 15"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Guests</Text>
-              <Text style={styles.detailValue}>2 adults</Text>
+              <Text style={styles.detailValue}>{data.guests ?? "2 adults"}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Room type</Text>
@@ -111,14 +158,21 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             <View style={styles.feeRow}>
               <Text style={styles.feeLabel}>Room total</Text>
               <Text style={styles.feeValue}>
-                {formatCurrency(price, currency)}
+                {formatCurrency(subtotal, displayCurrency)}
               </Text>
             </View>
 
             <View style={styles.feeRow}>
               <Text style={styles.feeLabel}>Taxes & fees</Text>
               <Text style={styles.feeValue}>
-                {formatCurrency(finalTax, currency)}
+                {formatCurrency(taxes, displayCurrency)}
+              </Text>
+            </View>
+
+            <View style={styles.feeRow}>
+              <Text style={styles.feeLabel}>TWOS service fee (5%)</Text>
+              <Text style={styles.feeValue}>
+                {formatCurrency(twosFee, displayCurrency)}
               </Text>
             </View>
 
@@ -127,9 +181,14 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             <View style={[styles.feeRow, { marginTop: SPACING.sm }]}>
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>
-                {formatCurrency(total, currency)}
+                {formatCurrency(total, displayCurrency)}
               </Text>
             </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Traveler information</Text>
+            <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
           </View>
 
           {/* Cancellation / notice */}
@@ -150,7 +209,7 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>Total</Text>
               <Text style={styles.priceValue}>
-                {formatCurrency(total, currency)}
+                {formatCurrency(total, displayCurrency)}
               </Text>
             </View>
 
@@ -161,7 +220,7 @@ const BookingCheckoutClone = ({ route, navigation }) => {
               accessibilityLabel="Confirm and pay"
             >
               <Text style={styles.ctaText}>
-                Confirm • {formatCurrency(total, currency)}
+                Confirm • {formatCurrency(total, displayCurrency)}
               </Text>
             </TouchableOpacity>
           </View>
@@ -192,7 +251,17 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 980,
     paddingHorizontal: SPACING.md,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
   logo: {
     width: 200,
@@ -231,6 +300,13 @@ const styles = StyleSheet.create({
   },
   hotelName: { fontSize: 16, fontWeight: "700", color: "#111" },
   hotelMeta: { color: "#666", marginTop: 4 },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: SPACING.sm,
+  },
+  badgeText: { color: BOOKING_YELLOW, fontSize: 12 },
 
   sectionTitle: {
     fontSize: 14,

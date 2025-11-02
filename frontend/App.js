@@ -33,6 +33,7 @@ import GenericCheckout from "./src/screens/GenericCheckout";
 import SignupScreen from "./src/screens/SignupScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
+import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
 
 // Icons
 import { MessageCircle, Package, Luggage, Settings } from "lucide-react-native";
@@ -144,6 +145,11 @@ export default function App() {
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen
+            name="BookingConfirmation"
+            component={BookingConfirmationScreen}
+            options={{ headerShown: false }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
       <StatusBar style="light" />
