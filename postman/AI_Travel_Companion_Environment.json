@@ -26,21 +26,21 @@
     {
       "key": "access_token",
       "value": "",
-      "description": "JWT Access Token (auto-populated)",
+      "description": "JWT Access Token (auto-populated from login)",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "refresh_token",
       "value": "",
-      "description": "JWT Refresh Token (auto-populated)",
+      "description": "JWT Refresh Token (auto-populated from login)",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "user_id",
       "value": "",
-      "description": "Current user ID (auto-populated)",
+      "description": "Current user ID (auto-populated from registration)",
       "type": "default",
       "enabled": true
     },
@@ -73,16 +73,37 @@
       "enabled": true
     },
     {
-      "key": "trip_id",
+      "key": "chat_id",
       "value": "",
-      "description": "Current trip ID (auto-populated)",
+      "description": "Current chat ID (auto-populated)",
       "type": "default",
       "enabled": true
     },
     {
-      "key": "package_id",
+      "key": "slot_id",
       "value": "",
-      "description": "Current package ID (auto-populated)",
+      "description": "AI service slot_id for chat tracking (auto-populated)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "plan_id",
+      "value": "",
+      "description": "Current plan ID (auto-populated)",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "share_code",
+      "value": "",
+      "description": "Chat share code for public access",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ai_service_url",
+      "value": "http://localhost:8001",
+      "description": "AI service base URL",
       "type": "default",
       "enabled": true
     }

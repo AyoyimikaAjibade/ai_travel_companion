@@ -4,16 +4,14 @@ Database models for the AI Travel Companion application.
 
 from .base import BaseModel
 from .user import User, UserPreference
-from .trip import Trip, TripCreate, TripPublic
-from .package import Package, PackageBase
-from .trip_component import TripComponent, TripComponentBase
-from .booking import BookingReference, BookingReferenceBase
+from .chat import Chat, ChatCreate, ChatPublic, ChatUpdate
+from .plan import Plan, PlanBase, PlanCreate, PlanUpdate
+from .chat_message import ChatMessage, ChatMessageCreate, ChatMessageUpdate
 
 __all__ = [
     'BaseModel',
     'User', 'UserPreference',
-    'Trip', 'TripCreate', 'TripPublic',
-    'Package', 'PackageBase',
-    'TripComponent', 'TripComponentBase',
-    'BookingReference', 'BookingReferenceBase'
+    'Chat', 'ChatCreate', 'ChatPublic', 'ChatUpdate',
+    'Plan', 'PlanBase', 'PlanCreate', 'PlanUpdate',
+    'ChatMessage', 'ChatMessageCreate', 'ChatMessageUpdate'
 ]

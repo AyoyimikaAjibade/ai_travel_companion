@@ -30,8 +30,11 @@ This guide will help you set up Postman for testing the AI Travel Companion API 
 | `test_email` | Test user email | ❌ |
 | `test_password` | Test user password | ❌ |
 | `temp_password` | Temporary password from reset | ✅ |
-| `trip_id` | Current trip ID | ✅ |
-| `package_id` | Current package ID | ✅ |
+| `chat_id` | Current chat ID (auto-populated) | ✅ |
+| `slot_id` | AI service slot_id for chat tracking | ✅ |
+| `plan_id` | Current plan ID (auto-populated) | ✅ |
+| `share_code` | Chat share code for public access | ✅ |
+| `ai_service_url` | AI service base URL | ❌ |
 
 ## 📚 Step 2: Import Collection
 
@@ -90,9 +93,25 @@ The collection includes automatic token management:
 2. **🔐 Register User** → Create test user
 3. **🔐 Login User** → Get authentication tokens
 4. **👤 Get Current User** → Verify authentication works
-5. **✈️ Create Trip** → Create test trip data
-6. **📦 Create Package** → Create test package
-7. **Continue with other endpoints...**
+5. **💬 Parse Chat Message** → Start AI chat conversation
+6. **💬 Search Travel Options** → Generate travel plans (when all info collected)
+7. **📋 Get Draft Plans** → View plans in Redis cache
+8. **📋 Confirm Chat and Plans** → Save to PostgreSQL database
+9. **💬 Get My Chats** → View all saved chats
+10. **Continue with other endpoints...**
+
+### 🤖 **AI Chat Flow (Recommended):**
+
+1. **🤖 Parse Chat Message** → Send initial message (e.g., "I want to fly from San Francisco to Paris")
+   - This creates a chat session and returns `chat_id` and `slot_id`
+   - Continue parsing messages to collect all required information
+2. **🤖 Search Travel Options** → When all info is collected, generate travel plans
+   - Plans are saved to Redis cache for quick access
+3. **📋 Get Draft Plans** → View generated plans in cache
+4. **📋 Update Draft Plan** → Edit plans as needed
+5. **🤖 Confirm Chat and Plans** → Save everything to PostgreSQL database
+   - All messages and plans are persisted
+   - Cache is cleared after confirmation
 
 ### 🔄 **Password Reset Testing Flow:**
 
@@ -110,14 +129,14 @@ The collection includes automatic token management:
 
 #### 📝 **Pre-filled Test Data:**
 - Default test user credentials
-- Sample trip data (NYC → LAX)
-- Sample package data with flight/hotel info
+- Sample chat data (San Francisco → Paris)
+- Sample plan data with flight/hotel info
 - All IDs are automatically captured and reused
 
 #### 🔄 **Smart Variable Management:**
 - `user_id` saved after registration
-- `trip_id` saved after trip creation
-- `package_id` saved after package creation
+- `chat_id` and `slot_id` saved after chat message parsing
+- `plan_id` saved after plan creation
 - Tokens automatically refreshed
 
 ## 🛠️ Step 6: Customization

@@ -64,8 +64,7 @@ class UserService(BaseService[User]):
             "is_active": user.is_active,
             "member_since": user.created_at,
             "last_login": user.last_login,
-            "total_trips": 0,  # Would query trip repository
-            "total_bookings": 0,  # Would query booking repository
+            "total_chats": 0,  # Would query chat repository
             "preferences_count": len(self.get_user_preferences(db, user_id))
         }
         

@@ -39,8 +39,7 @@ class User(UserBase, BaseModel, table=True):
     
     # Relationships
     preferences: List["UserPreference"] = Relationship(back_populates="user")
-    trips: List["Trip"] = Relationship(back_populates="user")
-    booking_references: List["BookingReference"] = Relationship(back_populates="user")
+    chats: List["Chat"] = Relationship(back_populates="user")
 
 class UserPreference(BaseModel, table=True):
     """User preferences model."""

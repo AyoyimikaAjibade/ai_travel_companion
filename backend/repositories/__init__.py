@@ -5,14 +5,14 @@ This layer handles all database operations and provides a clean interface to the
 
 from .base_repository import BaseRepository
 from .user_repository import UserRepository
-from .trip_repository import TripRepository
-from .package_repository import PackageRepository
-from .booking_repository import BookingRepository
+from .chat_repository import ChatRepository
+from .plan_repository import PlanRepository
+from .chat_message_repository import ChatMessageRepository
 
 __all__ = [
     'BaseRepository',
     'UserRepository',
-    'TripRepository', 
-    'PackageRepository',
-    'BookingRepository'
+    'ChatRepository', 
+    'PlanRepository',
+    'ChatMessageRepository'
 ]
