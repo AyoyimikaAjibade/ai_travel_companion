@@ -37,6 +37,16 @@ class Settings:
         "postgresql://ayoyimikaajibade:postgres@localhost/twos_db"
     )
     
+    # Redis Cache
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD")
+    REDIS_URL: Optional[str] = os.getenv("REDIS_URL")  # For Redis Cloud or other providers
+    # Cache TTL (Time To Live) in seconds - 24 hours for draft plans
+    CACHE_TTL_PLANS: int = int(os.getenv("CACHE_TTL_PLANS", "86400"))
+    CACHE_TTL_CHAT_MESSAGES: int = int(os.getenv("CACHE_TTL_CHAT_MESSAGES", "86400"))
+    
     # Email settings (for password reset, notifications, etc.)
     SMTP_TLS: bool = os.getenv("SMTP_TLS", "true").lower() == "true"
     SMTP_PORT: Optional[int] = int(os.getenv("SMTP_PORT", "587")) if os.getenv("SMTP_PORT") else None
@@ -53,6 +63,7 @@ class Settings:
     # AI/ML settings
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
+    AI_SERVICE_BASE_URL: str = os.getenv("AI_SERVICE_BASE_URL", "http://localhost:8001")
     
     # File storage
     UPLOAD_FOLDER: str = os.getenv("UPLOAD_FOLDER", os.path.join(os.path.dirname(__file__), "..", "uploads"))

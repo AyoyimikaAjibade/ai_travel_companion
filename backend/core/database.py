@@ -36,9 +36,9 @@ def init_db():
     """Initialize the database by creating all tables."""
     # Import models to ensure they are registered with SQLAlchemy
     from models.user import User, UserPreference
-    from models.trip import Trip
-    from models.package import Package
-    from models.booking import BookingReference
+    from models.chat import Chat
+    from models.plan import Plan
+    from models.chat_message import ChatMessage
     from models.base import BaseModel
     
     BaseModel.metadata.create_all(bind=engine)

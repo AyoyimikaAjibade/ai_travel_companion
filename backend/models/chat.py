@@ -5,8 +5,9 @@ import uuid
 
 from .base import BaseModel
 
-class TripBase(SQLModel):
-    """Base trip model with common fields."""
+class ChatBase(SQLModel):
+    """Base chat model with common fields."""
+    slot_id: Optional[str] = Field(default=None, index=True, max_length=26)  # ULID format for AI service chat tracking
     origin_code: str = Field(max_length=3, nullable=False)
     origin_name: str = Field(nullable=False)
     destination_code: str = Field(max_length=3, nullable=False)
@@ -18,12 +19,13 @@ class TripBase(SQLModel):
     status: str = Field(default="draft", max_length=20)
     notes: Optional[str] = Field(default=None)
 
-class TripCreate(TripBase):
-    """Model for creating a new trip."""
+class ChatCreate(ChatBase):
+    """Model for creating a new chat."""
     pass
 
-class TripUpdate(SQLModel):
-    """Model for updating trip information."""
+class ChatUpdate(SQLModel):
+    """Model for updating chat information."""
+    slot_id: Optional[str] = None
     origin_code: Optional[str] = None
     origin_name: Optional[str] = None
     destination_code: Optional[str] = None
@@ -35,22 +37,23 @@ class TripUpdate(SQLModel):
     status: Optional[str] = None
     notes: Optional[str] = None
 
-class TripPublic(TripBase):
-    """Public trip model for API responses."""
+class ChatPublic(ChatBase):
+    """Public chat model for API responses."""
     id: uuid.UUID
     user_id: uuid.UUID
     share_code: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
-class Trip(TripBase, BaseModel, table=True):
-    """Trip model for database representation."""
-    __tablename__ = "trips"
+class Chat(ChatBase, BaseModel, table=True):
+    """Chat model for database representation."""
+    __tablename__ = "chats"
     
     user_id: uuid.UUID = Field(foreign_key="users.id", nullable=False)
     share_code: Optional[str] = Field(default=None, unique=True, index=True)
     
     # Relationships
-    user: "User" = Relationship(back_populates="trips")
-    packages: List["Package"] = Relationship(back_populates="trip")
-    components: List["TripComponent"] = Relationship(back_populates="trip")
+    user: "User" = Relationship(back_populates="chats")
+    plans: List["Plan"] = Relationship(back_populates="chat")
+    messages: List["ChatMessage"] = Relationship(back_populates="chat")
+

@@ -1,6 +1,6 @@
 # AI Travel Companion
 
-An intelligent travel planning application that uses AI to help users create personalized trip itineraries through natural language conversations. The system consists of a FastAPI backend, React Native mobile frontend, and AI-powered natural language processing capabilities.
+An intelligent travel planning application that uses AI to help users create personalized travel plans through natural language conversations. The system consists of a FastAPI backend, React Native mobile frontend, and AI-powered natural language processing capabilities with Redis caching.
 
 ## 📋 Table of Contents
 
@@ -24,31 +24,31 @@ An intelligent travel planning application that uses AI to help users create per
 
 ## 🌟 Overview
 
-The AI Travel Companion is a modern travel planning platform that leverages artificial intelligence to simplify trip planning. Users can describe their travel preferences in natural language, and the system automatically generates comprehensive travel packages including flights, accommodations, car rentals, and activities.
+The AI Travel Companion is a modern travel planning platform that leverages artificial intelligence to simplify travel planning. Users can describe their travel preferences in natural language, and the system automatically generates comprehensive travel plans including flights, accommodations, car rentals, and activities.
 
 ## ✨ Features
 
 ### Core Features
-- **AI-Powered Chat Interface**: Natural language trip planning through conversational UI
-- **Intelligent Trip Planning**: Automatic itinerary generation based on user preferences
-- **Package Management**: Create, compare, and manage travel packages
-- **Real-time Booking**: Integration with travel booking platforms
+- **AI-Powered Chat Interface**: Natural language travel planning through conversational UI
+- **Intelligent Plan Generation**: Automatic travel plan generation based on user preferences
+- **Plan Management**: Create, compare, and manage travel plans with AI-generated and manual options
+- **Redis Caching**: Fast draft plan editing with Redis cache before final confirmation
 - **User Authentication**: Secure user registration and login system
-- **Trip History**: Save and manage past and upcoming trips
+- **Chat History**: Save and manage conversation history and travel plans
 
 ### Frontend Features
 - **Onboarding Experience**: Guided introduction to app features
-- **Chat-based Planning**: Intuitive conversation interface for trip planning
-- **Package Comparison**: Visual comparison of travel packages with scoring
-- **Trip Management**: View and manage saved trips
+- **Chat-based Planning**: Intuitive conversation interface for travel planning
+- **Plan Comparison**: Visual comparison of travel plans with scoring
+- **Chat Management**: View and manage conversation history and associated plans
 - **Settings & Preferences**: Customize user experience and preferences
 
 ### Backend Features
 - **RESTful API**: Comprehensive API for all travel planning operations
 - **User Management**: Authentication, authorization, and user profiles with username support
-- **Trip & Package Management**: CRUD operations for trips and packages
-- **Booking System**: Handle booking references and status tracking
-- **AI Integration**: Natural language processing for trip planning
+- **Chat & Plan Management**: CRUD operations for chats and plans with Redis caching
+- **AI Integration**: Natural language processing with Google Gemini for chat parsing and plan generation
+- **Redis Cache Layer**: Draft plans and messages stored in Redis for fast editing before PostgreSQL persistence
 - **Enhanced Authentication**: JWT-based auth with logout, password reset, and temporary passwords
 
 ## 🏗️ Architecture
@@ -57,8 +57,9 @@ The application follows a microservices architecture with clear separation of co
 
 - **Frontend**: React Native mobile application with Expo
 - **Backend**: FastAPI Python web service with PostgreSQL database
-- **AI Service**: Separate AI processing service using Google Gemini API
-- **Database**: PostgreSQL with SQLAlchemy ORM
+- **AI Service**: Separate AI processing service using Google Gemini API for natural language understanding
+- **Cache Layer**: Redis for storing draft plans and chat messages before final confirmation
+- **Database**: PostgreSQL with SQLAlchemy ORM for persistent storage
 - **Authentication**: JWT-based authentication system
 
 ## 🛠️ Technology Stack
@@ -92,6 +93,7 @@ Before setting up the project, ensure you have the following installed:
 - **Python 3.9+** (for backend)
 - **Node.js 16+** and **npm** (for frontend)
 - **PostgreSQL 12+** (for database)
+- **Redis 6+** (for caching draft plans and messages)
 - **Git** (for version control)
 - **Expo CLI** (for React Native development)
 
@@ -231,6 +233,17 @@ Create a `.env` file in the backend directory with the following variables:
 # Database Configuration
 DATABASE_URL=postgresql://username:password@localhost/twos_db
 
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+CACHE_TTL_PLANS=86400
+CACHE_TTL_CHAT_MESSAGES=86400
+
+# AI Service Configuration
+AI_SERVICE_BASE_URL=http://localhost:8001
+
 # Security Settings
 SECRET_KEY=your-super-secret-key-change-in-production
 JWT_SECRET_KEY=your-jwt-secret-key
@@ -327,23 +340,47 @@ The application uses JWT-based authentication with the following features:
 - `GET /api/v1/users/me` - Get current user profile
 - `PUT /api/v1/users/me` - Update user profile
 
-### Trip Management
-- `GET /api/v1/trips/` - Get user trips
-- `POST /api/v1/trips/` - Create new trip
-- `GET /api/v1/trips/{trip_id}` - Get specific trip
-- `PUT /api/v1/trips/{trip_id}` - Update trip
-- `DELETE /api/v1/trips/{trip_id}` - Delete trip
+### AI Chat Flow
+1. Frontend sends message → `/api/v1/ai/chat/parse`
+2. Backend proxies to AI service → Gemini parses message and extracts slots
+3. Messages saved to Redis cache for quick access
+4. When all information collected → `/api/v1/ai/chat/search`
+5. Plans generated → Saved to Redis cache as drafts
+6. User edits plans → Updated in Redis cache
+7. User confirms → `/api/v1/ai/chat/{chat_id}/confirm`
+8. All data (plans and messages) saved to PostgreSQL database
 
-### Package Management
-- `GET /api/v1/packages/trip/{trip_id}` - Get packages for trip
-- `POST /api/v1/packages/` - Create new package
-- `PUT /api/v1/packages/{package_id}` - Update package
-- `DELETE /api/v1/packages/{package_id}` - Delete package
+### Redis Cache Structure
 
-### Booking Management
-- `GET /api/v1/bookings/` - Get user bookings
-- `POST /api/v1/bookings/` - Create booking reference
-- `PUT /api/v1/bookings/{booking_id}` - Update booking
+- **Draft Plans**: `plan:draft:{chat_id}:{slot_id}` - Plans before user confirmation
+- **Chat Messages**: `messages:{chat_id}:{slot_id}` - Conversation history in cache
+- **Session Data**: `session:{chat_id}:{slot_id}` - Current slots and missing fields
+- **TTL**: 24 hours for all cached data
+
+### Chat Management
+- `GET /api/v1/chats/` - Get user chats
+- `POST /api/v1/chats/` - Create new chat
+- `GET /api/v1/chats/{chat_id}` - Get specific chat
+- `GET /api/v1/chats/slot/{slot_id}` - Get chat by AI service slot_id
+- `PUT /api/v1/chats/{chat_id}` - Update chat
+- `DELETE /api/v1/chats/{chat_id}` - Delete chat
+
+### Plan Management
+- `GET /api/v1/plans/chat/{chat_id}` - Get plans for chat
+- `POST /api/v1/plans/` - Create new plan
+- `GET /api/v1/plans/{plan_id}` - Get specific plan
+- `PUT /api/v1/plans/{plan_id}` - Update plan
+- `DELETE /api/v1/plans/{plan_id}` - Delete plan
+- `GET /api/v1/plans/chat/{chat_id}/best` - Get best scored plans
+- `GET /api/v1/plans/chat/{chat_id}/ai-generated` - Get AI-generated plans
+- `GET /api/v1/plans/chat/{chat_id}/manual` - Get manually edited plans
+
+### AI Integration Endpoints
+- `POST /api/v1/ai/chat/parse` - Parse user chat message with AI service
+- `POST /api/v1/ai/chat/search` - Search travel options and generate plans
+- `GET /api/v1/ai/chat/{chat_id}/drafts` - Get draft plans from Redis cache
+- `PUT /api/v1/ai/chat/{chat_id}/drafts/{slot_id}` - Update draft plan in cache
+- `POST /api/v1/ai/chat/{chat_id}/confirm` - Confirm and save plans/messages to PostgreSQL
 
 ### Health Check
 - `GET /api/v1/health` - API health status
@@ -357,19 +394,19 @@ ai_travel_companion/
 │   ├── api/v1/                # API endpoints
 │   │   ├── auth.py           # Authentication endpoints
 │   │   ├── users.py          # User management
-│   │   ├── trips.py          # Trip management
-│   │   ├── packages.py       # Package management
-│   │   ├── bookings.py       # Booking management
-│   │   └── components.py     # Trip components
+│   │   ├── chats.py          # Chat management
+│   │   ├── plans.py           # Plan management
+│   │   └── ai_integration.py  # AI service integration
 │   ├── core/                 # Core configuration
 │   │   ├── config.py         # Application settings
 │   │   ├── database.py       # Database configuration
-│   │   └── security.py       # Authentication & security
+│   │   ├── security.py       # Authentication & security
+│   │   └── cache.py          # Redis cache operations
 │   ├── models/               # SQLAlchemy models
 │   │   ├── user.py          # User model
-│   │   ├── trip.py          # Trip model
-│   │   ├── package.py       # Package model
-│   │   └── booking.py       # Booking model
+│   │   ├── chat.py          # Chat model
+│   │   ├── plan.py          # Plan model
+│   │   └── chat_message.py  # Chat message model
 │   ├── repositories/         # Data access layer
 │   ├── services/            # Business logic layer
 │   ├── schemas/             # Pydantic schemas
@@ -381,8 +418,8 @@ ai_travel_companion/
 │   │   │   ├── SplashScreen.js
 │   │   │   ├── OnboardingScreen.js
 │   │   │   ├── ChatScreen.js
-│   │   │   ├── PackagesScreen.js
-│   │   │   ├── MyTripsScreen.js
+│   │   │   ├── PlansScreen.js
+│   │   │   ├── MyChatsScreen.js
 │   │   │   └── SettingsScreen.js
 │   │   ├── hooks/           # Custom React hooks
 │   │   ├── stores/          # State management
@@ -509,19 +546,30 @@ Use the provided Postman collection in the `postman/` directory:
        volumes:
          - postgres_data:/var/lib/postgresql/data
    
+     redis:
+       image: redis:7-alpine
+       ports:
+         - "6379:6379"
+       volumes:
+         - redis_data:/data
+   
      backend:
        build: .
        ports:
          - "8000:8000"
        depends_on:
          - db
+         - redis
        environment:
          DATABASE_URL: postgresql://postgres:postgres@db:5432/twos_db
+         REDIS_HOST: redis
+         REDIS_PORT: 6379
        volumes:
          - ./backend:/app
    
    volumes:
      postgres_data:
+     redis_data:
    ```
 
 3. **Deploy**
@@ -580,8 +628,8 @@ For support and questions:
 - Real-time notifications
 - Offline mode support
 - Advanced AI recommendations
-- Social features (trip sharing)
-- Integration with more booking platforms
+- Social features (chat/plan sharing)
+- Integration with more travel booking platforms
 - Multi-language support
 
 ---

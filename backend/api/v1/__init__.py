@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from core.config import settings
 
 # Import all API route modules
-from . import auth, users, trips, packages, components, bookings
+from . import auth, users, chats, plans, ai_integration
 
 # Create main API router
 api_router = APIRouter()
@@ -25,27 +25,21 @@ api_router.include_router(
 )
 
 api_router.include_router(
-    trips.router,
-    prefix="/trips",
-    tags=["trips"]
+    chats.router,
+    prefix="/chats",
+    tags=["chats"]
 )
 
 api_router.include_router(
-    packages.router,
-    prefix="/packages",
-    tags=["packages"]
+    plans.router,
+    prefix="/plans",
+    tags=["plans"]
 )
 
 api_router.include_router(
-    components.router,
-    prefix="/components",
-    tags=["trip_components"]
-)
-
-api_router.include_router(
-    bookings.router,
-    prefix="/bookings",
-    tags=["bookings"]
+    ai_integration.router,
+    prefix="/ai",
+    tags=["ai_integration"]
 )
 
 # Health check endpoint

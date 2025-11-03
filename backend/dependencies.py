@@ -10,9 +10,9 @@ from fastapi import Depends
 from core.database import SessionLocal
 from services.auth_service import AuthService
 from services.user_service import UserService
-from services.trip_service import TripService
-from services.package_service import PackageService
-from services.booking_service import BookingService
+from services.chat_service import ChatService
+from services.plan_service import PlanService
+from services.chat_message_service import ChatMessageService
 
 
 # Database dependency
@@ -36,19 +36,20 @@ def get_user_service() -> UserService:
     return UserService()
 
 
-def get_trip_service() -> TripService:
-    """Get trip service instance."""
-    return TripService()
+def get_chat_service() -> ChatService:
+    """Get chat service instance."""
+    return ChatService()
 
 
-def get_package_service() -> PackageService:
-    """Get package service instance."""
-    return PackageService()
+def get_plan_service() -> PlanService:
+    """Get plan service instance."""
+    return PlanService()
 
 
-def get_booking_service() -> BookingService:
-    """Get booking service instance."""
-    return BookingService()
+def get_chat_message_service() -> ChatMessageService:
+    """Get chat message service instance."""
+    from services.chat_message_service import ChatMessageService
+    return ChatMessageService()
 
 
 # Repository dependencies (if needed directly)
@@ -58,19 +59,13 @@ def get_user_repository():
     return UserRepository()
 
 
-def get_trip_repository():
-    """Get trip repository instance."""
-    from repositories.trip_repository import TripRepository
-    return TripRepository()
+def get_chat_repository():
+    """Get chat repository instance."""
+    from repositories.chat_repository import ChatRepository
+    return ChatRepository()
 
 
-def get_package_repository():
-    """Get package repository instance."""
-    from repositories.package_repository import PackageRepository
-    return PackageRepository()
-
-
-def get_booking_repository():
-    """Get booking repository instance."""
-    from repositories.booking_repository import BookingRepository
-    return BookingRepository()
+def get_plan_repository():
+    """Get plan repository instance."""
+    from repositories.plan_repository import PlanRepository
+    return PlanRepository()
