@@ -8,6 +8,7 @@ import GradientBackground from "./GradientBackground";
 import { COLORS, GRADIENTS, BORDER_RADIUS, SPACING } from "../theme";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 import { formatCurrency } from "../utils/format";
+import { buildServiceKey, normalizeBookingLedger } from "../utils/booking";
 
 // 1) Static import so Metro bundles it
 let LoaderPlane;
@@ -27,23 +28,6 @@ try {
 }
 
 const TypingBubble = () => {
-  const lottieRef = React.useRef(null);
-  const [instanceKey] = React.useState(() => String(Date.now()));
-
-  const resetAndPlay = React.useCallback(() => {
-    try {
-      if (lottieRef.current) {
-        lottieRef.current.reset?.();
-        setTimeout(() => lottieRef.current?.play?.(), 10);
-      }
-    } catch {}
-  }, []);
-
-  React.useEffect(() => {
-    const id = setTimeout(resetAndPlay, 0);
-    return () => clearTimeout(id);
-  }, [resetAndPlay]);
-
   const sourceToUse = LoaderPlane || (__DEV__ ? DevFallback : null);
 
   return (
@@ -51,16 +35,11 @@ const TypingBubble = () => {
       <View style={styles.typingBubble}>
         {sourceToUse ? (
           <LottieView
-            key={instanceKey}
-            ref={lottieRef}
             source={sourceToUse}
-            autoPlay={false}
+            autoPlay
             loop
-            speed={1}
             resizeMode="contain"
             style={styles.lottie}
-            onLayout={resetAndPlay}
-            onAnimationFinish={resetAndPlay}
           />
         ) : (
           <View style={styles.lottieFallback}>
@@ -80,7 +59,6 @@ const MessageBubble = ({
   links,
   plan,
   chatId,
-  isBooked = false,
   booking = null,
   navigation: navigationProp, // may be passed from parent
 }) => {
@@ -89,6 +67,31 @@ const MessageBubble = ({
   const { convertCurrency, targetCurrency } = useCurrencyConverter();
 
   const isUser = role === "user";
+
+  const bookingLedger = React.useMemo(
+    () => (booking ? normalizeBookingLedger(booking) : null),
+    [booking]
+  );
+
+  const isServiceBooked = React.useCallback(
+    (serviceKey) => {
+      if (!serviceKey || !bookingLedger) return false;
+      const record = bookingLedger.records?.[serviceKey];
+      return Boolean(record && record.status !== "cancelled");
+    },
+    [bookingLedger]
+  );
+
+  const openServiceBooking = React.useCallback(
+    (serviceKey) => {
+      if (!serviceKey || !bookingLedger) return;
+      navigation?.navigate?.("BookingConfirmation", {
+        chatId,
+        serviceKey,
+      });
+    },
+    [bookingLedger, navigation, chatId]
+  );
 
   if (isTyping) {
     return <TypingBubble />;
@@ -114,101 +117,210 @@ const MessageBubble = ({
         type: typeName,
         data: payload,
         currency: payload?.currency,
+        chatId,
+        serviceKey: payload?.serviceKey,
+        serviceType: payload?.serviceType,
+        basePlanId: payload?.planId || payload?.basePlanId,
       });
     },
-    [navigation]
+    [navigation, chatId]
   );
 
-  const bookingLocked = Boolean(isBooked && booking);
+  const handleBookAll = React.useCallback(
+    ({
+      plan: planOverride,
+      basePlanId,
+      flightKey,
+      hotelKey,
+      carKey,
+      attractionDescriptors = [],
+    } = {}) => {
+      const sourcePlan = planOverride ?? plan;
+      if (!navigation?.navigate || !sourcePlan) return;
 
-  const handleViewBooking = React.useCallback(() => {
-    if (!bookingLocked) return;
-    navigation?.navigate?.("BookingConfirmation", {
-      chatId,
-      booking,
-    });
-  }, [bookingLocked, navigation, chatId, booking]);
+      const effectiveBaseId =
+        basePlanId ||
+        sourcePlan.planId ||
+        sourcePlan.slotId ||
+        "plan";
 
-  const handleBookAll = React.useCallback(() => {
-    if (!navigation?.navigate || !plan) return;
+      const items = [];
+      const displayCurrency = targetCurrency || "USD";
+      let total = 0;
 
-    const items = [];
-    const displayCurrency = targetCurrency || "USD";
-    let total = 0;
+      const registerItem = (label, price, meta = {}) => {
+        if (price == null || Number.isNaN(Number(price))) return;
+        const converted = convertCurrency(
+          Number(price),
+          meta.currency,
+          displayCurrency
+        );
+        total += converted;
+        items.push({
+          label,
+          price: converted,
+          currency: displayCurrency,
+          ...meta,
+        });
+      };
 
-    const addItem = (label, price, meta = {}) => {
-      if (price == null || Number.isNaN(Number(price))) return;
-      const converted = convertCurrency(Number(price), meta.currency, displayCurrency);
-      total += converted;
-      items.push({
-        label,
-        price: converted,
-        currency: displayCurrency,
-        ...meta,
-      });
-    };
+      const ensureKey = (providedKey, type, unique) =>
+        providedKey || buildServiceKey(effectiveBaseId, type, unique);
 
-    if (plan?.flight) {
-      addItem("Flight", plan.flight.price, {
-        provider: plan.flight.airline,
-        description: `${plan.flight.airline ?? "Flight"} ${
-          plan.flight.type ?? ""
-        }`.trim(),
-        currency: plan.flight.currency,
-      });
-    }
+      if (sourcePlan?.flight) {
+        const key = ensureKey(flightKey, "flight");
+        if (!isServiceBooked(key)) {
+          registerItem("Flight", sourcePlan.flight.price, {
+            provider: sourcePlan.flight.airline,
+            description: `${sourcePlan.flight.airline ?? "Flight"} ${
+              sourcePlan.flight.type ?? ""
+            }`.trim(),
+            currency: sourcePlan.flight.currency,
+            serviceType: "flight",
+            serviceKey: key,
+            planData: sourcePlan.flight,
+          });
+        }
+      }
 
-    if (plan?.hotel) {
-      const nightly = plan.hotel.price_per_night ?? plan.hotel.price;
-      const hotelName = plan.hotel.name ?? "Hotel";
-      const hotelDesc = plan.hotel.rating
-        ? `${hotelName} (${plan.hotel.rating}★)`
-        : hotelName;
-      addItem("Hotel", nightly, {
-        provider: hotelName,
-        description: hotelDesc,
-        currency: plan.hotel.currency,
-      });
-    }
+      if (sourcePlan?.hotel) {
+        const nightly = sourcePlan.hotel.price_per_night ?? sourcePlan.hotel.price;
+        const hotelName = sourcePlan.hotel.name ?? "Hotel";
+        const hotelDesc = sourcePlan.hotel.rating
+          ? `${hotelName} (${sourcePlan.hotel.rating}★)`
+          : hotelName;
+        const key = ensureKey(hotelKey, "hotel");
+        if (!isServiceBooked(key)) {
+          registerItem("Hotel", nightly, {
+            provider: hotelName,
+            description: hotelDesc,
+            currency: sourcePlan.hotel.currency,
+            serviceType: "hotel",
+            serviceKey: key,
+            planData: sourcePlan.hotel,
+          });
+        }
+      }
 
-    if (plan?.car) {
-      const carPrice = plan.car.total_price ?? plan.car.price_per_day ?? plan.car.price;
-      addItem("Car", carPrice, {
-        provider: plan.car.company,
-        description: plan.car.car_type,
-        currency: plan.car.currency,
-      });
-    }
+      if (sourcePlan?.car) {
+        const carPrice =
+          sourcePlan.car.total_price ??
+          sourcePlan.car.price_per_day ??
+          sourcePlan.car.price;
+        const key = ensureKey(carKey, "car");
+        if (!isServiceBooked(key)) {
+          registerItem("Car", carPrice, {
+            provider: sourcePlan.car.company,
+            description: sourcePlan.car.car_type,
+            currency: sourcePlan.car.currency,
+            serviceType: "car",
+            serviceKey: key,
+            planData: sourcePlan.car,
+          });
+        }
+      }
 
-    if (Array.isArray(plan?.attractions)) {
-      plan.attractions.forEach((attr) => {
-        addItem(attr.name ?? "Attraction", attr.price, {
-          provider: attr.name,
-          description: attr.link,
-          currency: attr.currency,
+      const attractionsSource =
+        attractionDescriptors.length > 0
+          ? attractionDescriptors
+          : Array.isArray(sourcePlan?.attractions)
+          ? sourcePlan.attractions.map((attr, idx) => ({
+              item: attr,
+              serviceKey: ensureKey(
+                null,
+                "attraction",
+                attr?.id ?? attr?.name ?? idx + 1
+              ),
+              booked: false,
+              index: idx,
+            }))
+          : [];
+
+      attractionsSource.forEach(({ item, serviceKey, booked, index }) => {
+        const key = ensureKey(serviceKey, "attraction", item?.id ?? index + 1);
+        if (isServiceBooked(key) || booked) return;
+        registerItem(item.name ?? "Attraction", item.price, {
+          provider: item.name,
+          description: item.link,
+          currency: item.currency,
+          serviceType: "attraction",
+          serviceKey: key,
+          planData: item,
+          attractionIndex: index,
         });
       });
-    }
 
-    if (!items.length) return;
+      if (!items.length) return;
 
-    navigation.navigate("GenericCheckout", {
-      provider: "All-in-one package",
-      type: "combined",
-      data: {
-        name: "Complete itinerary",
-        description: "Flight, hotel, and extras in one secure checkout.",
-        items,
-        price: total,
-        currency: displayCurrency,
-      },
-    });
-  }, [navigation, plan, convertCurrency, targetCurrency]);
+      navigation.navigate("GenericCheckout", {
+        provider: "All-in-one package",
+        type: "combined",
+        chatId,
+        data: {
+          name: "Complete itinerary",
+          description: "Flight, hotel, and extras in one secure checkout.",
+          items,
+          price: total,
+          currency: displayCurrency,
+          basePlanId: effectiveBaseId,
+        },
+      });
+    },
+    [
+      navigation,
+      plan,
+      convertCurrency,
+      targetCurrency,
+      isServiceBooked,
+    ]
+  );
 
   const renderPlanSection = () => {
     if (!plan) return null;
     const { flight, hotel, car, attractions, planId, slotId } = plan;
     const hasAttractions = Array.isArray(attractions) && attractions.length > 0;
+    const basePlanId = planId || slotId || "plan";
+
+    const flightAvailable =
+      flight && typeof flight === "object" && Object.keys(flight).length > 0;
+    const hotelAvailable =
+      hotel && typeof hotel === "object" && Object.keys(hotel).length > 0;
+    const carAvailable =
+      car && typeof car === "object" && Object.keys(car).length > 0;
+
+    const flightKey = flightAvailable
+      ? buildServiceKey(basePlanId, "flight")
+      : null;
+    const hotelKey = hotelAvailable
+      ? buildServiceKey(basePlanId, "hotel")
+      : null;
+    const carKey = carAvailable ? buildServiceKey(basePlanId, "car") : null;
+
+    const attractionDescriptors = hasAttractions
+      ? attractions.map((item, idx) => {
+          const unique = item?.id ?? item?.name ?? idx + 1;
+          const serviceKey = buildServiceKey(basePlanId, "attraction", unique);
+          return {
+            item,
+            index: idx,
+            serviceKey,
+            booked: isServiceBooked(serviceKey),
+          };
+        })
+      : [];
+
+    const flightBooked = flightKey ? isServiceBooked(flightKey) : false;
+    const hotelBooked = hotelKey ? isServiceBooked(hotelKey) : false;
+    const carBooked = carKey ? isServiceBooked(carKey) : false;
+
+    const pendingKeys = [];
+    if (flightAvailable && !flightBooked) pendingKeys.push(flightKey);
+    if (hotelAvailable && !hotelBooked) pendingKeys.push(hotelKey);
+    if (carAvailable && !carBooked) pendingKeys.push(carKey);
+    attractionDescriptors.forEach((descriptor) => {
+      if (!descriptor.booked) pendingKeys.push(descriptor.serviceKey);
+    });
+    const hasPendingServices = pendingKeys.length > 0;
 
     return (
       <View style={styles.planContainer}>
@@ -260,18 +372,22 @@ const MessageBubble = ({
               style={styles.planCta}
               activeOpacity={0.9}
               onPress={
-                bookingLocked
-                  ? handleViewBooking
+                flightBooked
+                  ? () => openServiceBooking(flightKey)
                   : () =>
                       openProviderPreview("Expedia", "flight", {
                         ...flight,
                         price: flight.price,
                         currency: flight.currency,
+                        serviceKey: flightKey,
+                        serviceType: "flight",
+                        planId: basePlanId,
+                        basePlanId,
                       })
               }
             >
               <Text style={styles.planCtaText}>
-                {bookingLocked ? "View booking" : "Book with Expedia"}
+                {flightBooked ? "View booking" : "Book with Expedia"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -308,18 +424,22 @@ const MessageBubble = ({
               style={styles.planCta}
               activeOpacity={0.9}
               onPress={
-                bookingLocked
-                  ? handleViewBooking
+                hotelBooked
+                  ? () => openServiceBooking(hotelKey)
                   : () =>
                       openProviderPreview("Booking.com", "hotel", {
                         ...hotel,
                         price: hotel.price_per_night ?? hotel.price,
                         currency: hotel.currency,
+                        serviceKey: hotelKey,
+                        serviceType: "hotel",
+                        planId: basePlanId,
+                        basePlanId,
                       })
               }
             >
               <Text style={styles.planCtaText}>
-                {bookingLocked ? "View booking" : "Book with Booking.com"}
+                {hotelBooked ? "View booking" : "Book with Booking.com"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -355,18 +475,22 @@ const MessageBubble = ({
               style={styles.planCta}
               activeOpacity={0.9}
               onPress={
-                bookingLocked
-                  ? handleViewBooking
+                carBooked
+                  ? () => openServiceBooking(carKey)
                   : () =>
-                      openProviderPreview("Rental Partner", "car", {
+                      openProviderPreview(car.company ?? "Hertz", "car", {
                         ...car,
                         price: car.total_price ?? car.price_per_day ?? car.price,
                         currency: car.currency,
+                        serviceKey: carKey,
+                        serviceType: "car",
+                        planId: basePlanId,
+                        basePlanId,
                       })
               }
             >
               <Text style={styles.planCtaText}>
-                {bookingLocked ? "View booking" : "Reserve this car"}
+                {carBooked ? "View booking" : "Reserve this car"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -375,17 +499,21 @@ const MessageBubble = ({
         {hasAttractions && (
           <View style={styles.planSection}>
             <Text style={styles.planSectionTitle}>Attractions</Text>
-            {attractions.map((item, idx) => (
+            {attractionDescriptors.map(({ item, serviceKey, booked }, idx) => (
               <View key={`${item.name}-${idx}`} style={styles.attractionRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.planLine}>{item.name}</Text>
                   {item.price != null && (
                     <Text style={styles.planSubLine}>
-                  {formatCurrency(
-                    convertCurrency(item.price, item.currency, targetCurrency),
-                    targetCurrency
-                  )}
-                  </Text>
+                      {formatCurrency(
+                        convertCurrency(
+                          item.price,
+                          item.currency,
+                          targetCurrency
+                        ),
+                        targetCurrency
+                      )}
+                    </Text>
                   )}
                 </View>
                 {item.link && (
@@ -393,18 +521,23 @@ const MessageBubble = ({
                     style={styles.planLinkSmall}
                     activeOpacity={0.85}
                     onPress={
-                      bookingLocked
-                        ? handleViewBooking
+                      booked
+                        ? () => openServiceBooking(serviceKey)
                         : () =>
                             openProviderPreview("Experience", "attraction", {
                               ...item,
                               price: item.price,
                               currency: item.currency,
+                              serviceKey,
+                              serviceType: "attraction",
+                              planId: basePlanId,
+                              basePlanId,
+                              attractionIndex: idx,
                             })
                     }
                   >
                     <Text style={styles.planLinkTextSmall}>
-                      {bookingLocked ? "View booking" : "Book"}
+                      {booked ? "View booking" : "Book"}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -413,11 +546,20 @@ const MessageBubble = ({
           </View>
         )}
 
-        {!bookingLocked && (
+        {hasPendingServices && (
           <TouchableOpacity
             style={[styles.planCta, styles.planCtaFull]}
             activeOpacity={0.92}
-            onPress={handleBookAll}
+            onPress={() =>
+              handleBookAll({
+                plan,
+                basePlanId,
+                flightKey,
+                hotelKey,
+                carKey,
+                attractionDescriptors,
+              })
+            }
           >
             <Text style={styles.planCtaText}>Book everything together</Text>
           </TouchableOpacity>

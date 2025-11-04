@@ -1,5 +1,5 @@
 // src/screens/ExpediaCheckoutClone.js
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,19 +11,90 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
+import PassengersForm, {
+  createPassenger,
+} from "../components/PassengersForm";
+import { usePremiumAlert } from "../components/PremiumAlert";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
-import { useState } from "react";
-import { Alert } from "react-native";
+
+const CABIN_MULTIPLIERS = {
+  economy: 1,
+  business: 2.5,
+  first: 6.5,
+};
+
+const CABIN_OPTIONS = [
+  {
+    id: "economy",
+    label: "Economy",
+    subtitle: "Standard comfort",
+  },
+  {
+    id: "business",
+    label: "Business",
+    subtitle: "More space (price × 2.5)",
+  },
+  {
+    id: "first",
+    label: "First",
+    subtitle: "Suite experience (price × 6.5)",
+  },
+];
 
 const ExpediaCheckoutClone = ({ route, navigation }) => {
   const { data = {}, currency = "USD" } = route.params || {};
+  const serviceKey = route.params?.serviceKey;
+  const serviceType = route.params?.serviceType ?? "flight";
+  const basePlanId = route.params?.basePlanId;
+  const chatId = route.params?.chatId;
   const { convertCurrency, targetCurrency } = useCurrencyConverter();
   const displayCurrency = targetCurrency || currency;
   const rawPrice = data?.price ?? 980;
-  const price = convertCurrency(rawPrice, currency, displayCurrency);
+  const cabinDefault = (data?.cabinClass ?? data?.cabin ?? "economy")
+    .toString()
+    .toLowerCase();
+  const initialPassengers = useMemo(() => {
+    if (Array.isArray(data?.passengers) && data.passengers.length) {
+      return data.passengers.map((passenger) => {
+        const base = createPassenger();
+        return {
+          ...base,
+          ...passenger,
+          id: passenger.id ?? base.id,
+        };
+      });
+    }
+    return [createPassenger()];
+  }, [data?.passengers]);
+  const [passengers, setPassengers] = useState(initialPassengers);
+  const maxPassengers = Math.max(
+    Number(data?.maxPassengers ?? data?.maxGuests ?? 8) || 1,
+    1
+  );
+  const [cabinClass, setCabinClass] = useState(
+    CABIN_MULTIPLIERS[cabinDefault] ? cabinDefault : "economy"
+  );
+  const passengerCount = Math.max(passengers.length, 1);
+  const basePricePerPassenger = convertCurrency(
+    rawPrice,
+    currency,
+    displayCurrency
+  );
+  const pricePerPassenger =
+    basePricePerPassenger * (CABIN_MULTIPLIERS[cabinClass] ?? 1);
+  const price = pricePerPassenger * passengerCount;
   const taxes = price * 0.1;
   const twosFee = price * 0.05;
   const total = price + taxes + twosFee;
+  const baseFareTotal = basePricePerPassenger * passengerCount;
+  const upgradeTotal = Math.max(price - baseFareTotal, 0);
+  const pricePerPassengerLabel = formatCurrency(
+    pricePerPassenger,
+    displayCurrency
+  );
+  const baseFareLabel = formatCurrency(baseFareTotal, displayCurrency);
+  const upgradeLabel =
+    upgradeTotal > 0 ? formatCurrency(upgradeTotal, displayCurrency) : null;
   const depart = data?.departure_time
     ? new Date(data.departure_time).toLocaleString()
     : "Jan 11, 4:55 PM";
@@ -40,21 +111,45 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
     traveler.name.trim().length > 0 &&
     traveler.email.trim().length > 0 &&
     traveler.phone.trim().length >= 6;
+  const passengersValid = passengers.every(
+    (p) =>
+      typeof p?.firstName === "string" &&
+      p.firstName.trim().length > 0 &&
+      typeof p?.lastName === "string" &&
+      p.lastName.trim().length > 0
+  );
+  const [showPremiumAlert, premiumAlert] = usePremiumAlert();
 
   const handlePay = () => {
     if (!travelerValid) {
-      Alert.alert(
-        "Traveler details",
-        "Please fill in traveler name, email, and contact number before continuing."
-      );
+      showPremiumAlert({
+        title: "Traveler details",
+        message:
+          "Please fill in traveler name, email, and contact number before continuing.",
+        variant: "warning",
+      });
+      return;
+    }
+    if (!passengersValid) {
+      showPremiumAlert({
+        title: "Passengers",
+        message: "Please add names for every passenger before continuing.",
+        variant: "warning",
+      });
       return;
     }
     navigation.navigate("FakePayment", {
       provider: "Expedia",
       type: "flight",
+      serviceType,
+      serviceKey,
+      basePlanId,
+      chatId,
       data: {
         ...data,
         traveler,
+        passengers,
+        cabinClass,
         price,
         currency: displayCurrency,
       },
@@ -116,17 +211,63 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.sectionLabel}>Traveler information</Text>
-          <SummaryRow label="Passenger 1" value={data.traveler ?? "John Doe"} />
-          <SummaryRow label="Passenger 2" value={data.coTraveler ?? "Jane Doe"} />
+          <Text style={styles.sectionLabel}>Passengers</Text>
+          {passengers.map((passenger, index) => (
+            <SummaryRow
+              key={passenger.id ?? `passenger-${index}`}
+              label={`Passenger ${index + 1}`}
+              value={`${passenger.firstName ?? ""} ${
+                passenger.lastName ?? ""
+              }`.trim() || "—"}
+            />
+          ))}
+          <Text style={styles.cabinHint}>{`Max passengers: ${maxPassengers}`}</Text>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <Text style={styles.sectionLabel}>Cabin class</Text>
+          <View style={styles.cabinOptions}>
+            {CABIN_OPTIONS.map((option) => {
+              const active = option.id === cabinClass;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[
+                    styles.cabinOption,
+                    active && styles.cabinOptionActive,
+                  ]}
+                  onPress={() => setCabinClass(option.id)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.cabinOptionLabel,
+                      active && styles.cabinOptionLabelActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                  <Text style={styles.cabinOptionSubtitle}>
+                    {option.subtitle}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.cabinHint}>
+            {`Per passenger: ${pricePerPassengerLabel}`}
+          </Text>
         </View>
 
         <View style={styles.summaryCard}>
           <Text style={styles.sectionLabel}>Price summary</Text>
           <SummaryRow
-            label="Base fare"
-            value={formatCurrency(price * 0.82, displayCurrency)}
+            label={`Fare (${passengerCount} × ${pricePerPassengerLabel})`}
+            value={baseFareLabel}
           />
+          {upgradeLabel ? (
+            <SummaryRow label="Cabin upgrade" value={upgradeLabel} />
+          ) : null}
           <SummaryRow
             label="Taxes & fees"
             value={formatCurrency(taxes, displayCurrency)}
@@ -142,8 +283,16 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
           />
         </View>
 
+        <View style={{ marginBottom: 16, marginHorizontal: 20 }}>
+          <PassengersForm
+            value={passengers}
+            onChange={setPassengers}
+            maxCount={maxPassengers}
+          />
+        </View>
+
         <View style={styles.summaryCard}>
-          <Text style={styles.sectionLabel}>Traveler information</Text>
+          <Text style={styles.sectionLabel}>Traveler contact</Text>
           <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
         </View>
 
@@ -152,6 +301,7 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
             Continue • {formatCurrency(total, displayCurrency)}
           </Text>
         </TouchableOpacity>
+        {premiumAlert}
       </ScrollView>
     </SafeAreaView>
   );
@@ -259,6 +409,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(79,139,255,0.15)",
     marginBottom: 16,
+    gap: 8,
+  },
+  cabinOptions: {
+    flexDirection: "column",
+    gap: 10,
+  },
+  cabinOption: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(79,139,255,0.2)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "rgba(79,139,255,0.08)",
+    gap: 4,
+  },
+  cabinOptionActive: {
+    borderColor: "rgba(79,139,255,0.6)",
+    backgroundColor: "rgba(79,139,255,0.2)",
+  },
+  cabinOptionLabel: {
+    color: "#fff",
+    fontFamily: "Urbanist_600SemiBold",
+    fontSize: 15,
+  },
+  cabinOptionLabelActive: {
+    color: "#bfdbfe",
+  },
+  cabinOptionSubtitle: {
+    color: "rgba(190,214,255,0.75)",
+    fontSize: 12,
+  },
+  cabinHint: {
+    marginTop: 4,
+    color: "rgba(190,214,255,0.8)",
+    fontSize: 12,
   },
   payBtn: {
     marginTop: 12,

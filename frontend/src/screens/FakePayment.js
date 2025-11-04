@@ -10,7 +10,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,9 +17,22 @@ import { SPACING, COLORS } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { useSavedChatsStore } from "../stores/savedChatsStore";
 import { ChevronLeft } from "lucide-react-native";
+import { usePremiumAlert } from "../components/PremiumAlert";
+import {
+  createBookingRecord,
+  buildServiceKey,
+  createEmptyBookingLedger,
+  upsertBookingRecord,
+  normalizeBookingLedger,
+} from "../utils/booking";
 
 export default function FakePayment({ route, navigation }) {
   const { provider, type, data } = route.params || {};
+  const serviceTypeParam = route.params?.serviceType ?? type ?? "item";
+  const serviceKeyParam =
+    route.params?.serviceKey ?? data?.serviceKey ?? null;
+  const basePlanId =
+    route.params?.basePlanId ?? data?.basePlanId ?? data?.planId ?? null;
   const summary = route.params?.summary ?? {};
   const summaryTotal = summary.total_price;
   const summaryCurrency = summary.currency;
@@ -32,7 +44,9 @@ export default function FakePayment({ route, navigation }) {
   const twosFee = Math.max(summary.twos_fee ?? amount * 0.05, 0);
   const taxes = Math.max(summary.taxes ?? amount - subtotal - twosFee, 0);
   const travelerInfo = data?.traveler ?? null;
+  const passengers = Array.isArray(data?.passengers) ? data.passengers : [];
   const chatIdRef = useRef(useSavedChatsStore.getState()?.currentChatId ?? null);
+  const [showPremiumAlert, premiumAlert] = usePremiumAlert();
 
   // UI state
   const [method, setMethod] = useState("apple"); // 'apple' | 'card' | 'paypal'
@@ -68,6 +82,29 @@ export default function FakePayment({ route, navigation }) {
   };
 
   // Simulate processing and then go back to Chat
+  const amountPaid = summaryTotal ?? amount;
+
+  const formatServiceLabel = (serviceType) => {
+    const normalized = (serviceType || "").toLowerCase();
+    switch (normalized) {
+      case "flight":
+        return "Flight";
+      case "hotel":
+        return "Hotel";
+      case "car":
+      case "rental":
+      case "rental-car":
+        return "Car rental";
+      case "attraction":
+      case "experience":
+        return "Attraction";
+      case "combined":
+        return "Package";
+      default:
+        return "Booking";
+    }
+  };
+
   const finishPayment = () => {
     setLoading(true);
     // simulate remote processing
@@ -78,50 +115,213 @@ export default function FakePayment({ route, navigation }) {
 
       try {
         const store = useSavedChatsStore.getState();
-        const chatId = chatIdRef.current ?? store?.currentChatId;
+        const chatIdFromParams = route.params?.chatId;
+        const chatId = chatIdFromParams ?? chatIdRef.current ?? store?.currentChatId;
         chatIdRef.current = chatId;
+        
+        if (__DEV__) {
+          console.log('[FakePayment] Saving booking with chatId:', chatId);
+          console.log('[FakePayment] chatId sources:', {
+            fromParams: route.params?.chatId,
+            fromRef: chatIdRef.current,
+            fromStore: store?.currentChatId,
+            final: chatId
+          });
+        }
+        
         if (chatId) {
           const chat = store.getChatById?.(chatId);
           if (chat) {
+            if (__DEV__) {
+              console.log('[FakePayment] Found chat, current booking records:', Object.keys(chat.booking?.records || {}).length);
+            }
             const confirmationTimestamp = new Date().toISOString();
-            const confirmationText = `✅ Booking confirmed with ${
-              provider ?? "our partner"
-            }. Your ${type ?? "booking"} is all set!`;
-            const confirmationMessage = {
-              role: "bot",
-              text: confirmationText,
-              timestamp: confirmationTimestamp,
+            const createdRecords = [];
+            
+            // Get current booking ledger from chat to preserve existing bookings
+            const currentLedger = chat.booking ? normalizeBookingLedger(chat.booking) : createEmptyBookingLedger();
+            // Deep copy the ledger to avoid reference issues
+            let navLedger = {
+              ...currentLedger,
+              records: { ...currentLedger.records },
+              batches: { ...currentLedger.batches },
+              byType: { ...currentLedger.byType },
             };
-            const updatedMessages = [...(chat.messages || []), confirmationMessage];
-
-            const booking = {
-              provider: provider ?? "Travel Partner",
-              type: type ?? "booking",
-              amount,
-              currency,
-              data,
-              confirmedAt: confirmationTimestamp,
-              twosFee,
-              traveler: travelerInfo,
-            };
-
-            store.updateChatContent?.(chatId, updatedMessages, {
-              status: "booked",
-              booking,
-            });
-
-            setTimeout(() => {
-              resetForm();
-              navigation.replace("BookingConfirmation", {
-                chatId,
-                booking,
+            
+            if (
+              serviceTypeParam === "combined" &&
+              Array.isArray(data?.items) &&
+              data.items.length
+            ) {
+              const batchId = `batch_${Date.now().toString(36)}_${Math.random()
+                .toString(36)
+                .slice(2, 6)}`;
+              data.items.forEach((item, index) => {
+                const itemType =
+                  item.serviceType ??
+                  item.service_type ??
+                  item.type ??
+                  "item";
+                const fallbackKey = buildServiceKey(
+                  basePlanId ?? data?.planId ?? chat.planId ?? chat.id,
+                  itemType,
+                  item.attractionIndex ?? index + 1
+                );
+                const key = item.serviceKey ?? fallbackKey;
+                const record = createBookingRecord({
+                  serviceKey: key,
+                  serviceType: itemType,
+                  provider: item.provider ?? provider ?? "Travel Partner",
+                  amount: item.price ?? 0,
+                  currency: item.currency ?? currency,
+                  subtotal: item.price ?? 0,
+                  taxes: 0,
+                  twosFee: 0,
+                  traveler: travelerInfo,
+                  passengers,
+                  cabinClass: data?.cabinClass,
+                  data: {
+                    ...item.planData,
+                    ...item,
+                    combined: true,
+                    basePlanId,
+                  },
+                  batchId,
+                });
+                createdRecords.push(record);
+                navLedger = upsertBookingRecord(navLedger, record);
               });
-            }, 900);
-            return;
+            } else {
+              const fallbackKey = buildServiceKey(
+                basePlanId ?? data?.planId ?? chat.planId ?? chat.id,
+                serviceTypeParam
+              );
+              const record = createBookingRecord({
+                serviceKey: serviceKeyParam ?? fallbackKey,
+                serviceType: serviceTypeParam,
+                provider: provider ?? "Travel Partner",
+                amount: amountPaid,
+                currency,
+                subtotal,
+                taxes,
+                twosFee,
+                traveler: travelerInfo,
+                passengers,
+                cabinClass: data?.cabinClass,
+                data: {
+                  ...data,
+                  basePlanId,
+                },
+              });
+              createdRecords.push(record);
+              navLedger = upsertBookingRecord(navLedger, record);
+            }
+            
+            // Save all bookings at once using markChatBooked
+            if (createdRecords.length > 0) {
+              store.markChatBooked?.(chatId, navLedger);
+              if (__DEV__) {
+                console.log('[FakePayment] Saved', createdRecords.length, 'booking records to chatId:', chatId);
+                console.log('[FakePayment] Booking ledger:', {
+                  recordsCount: Object.keys(navLedger.records || {}).length,
+                  recordKeys: Object.keys(navLedger.records || {})
+                });
+              }
+            }
+
+            if (createdRecords.length) {
+              const humanLabel =
+                createdRecords.length === 1
+                  ? formatServiceLabel(createdRecords[0].serviceType)
+                  : createdRecords
+                      .map((record) => formatServiceLabel(record.serviceType))
+                      .join(", ");
+              const providerLabel =
+                createdRecords.length === 1
+                  ? createdRecords[0].provider
+                  : provider ?? "our partners";
+              const confirmationText =
+                createdRecords.length === 1
+                  ? `✅ ${humanLabel} confirmed with ${providerLabel}.`
+                  : `✅ ${createdRecords.length} bookings confirmed (${humanLabel}).`;
+
+              const confirmationMessage = {
+                role: "bot",
+                text: confirmationText,
+                timestamp: confirmationTimestamp,
+              };
+              const updatedMessages = [
+                ...(chat.messages || []),
+                confirmationMessage,
+              ];
+              
+              // Update chat content with messages AND booking ledger to ensure consistency
+              store.updateChatContent?.(chatId, updatedMessages, {
+                booking: navLedger,
+                status: "booked",
+              });
+
+              const firstRecord = createdRecords[0];
+              // Ensure navLedger is properly structured before passing
+              const bookingForNav = {
+                records: { ...navLedger.records },
+                batches: { ...navLedger.batches },
+                byType: { ...navLedger.byType },
+                lastUpdated: navLedger.lastUpdated,
+              };
+              
+              if (__DEV__) {
+                console.log('[FakePayment] Prepared booking for navigation:', {
+                  recordsCount: Object.keys(bookingForNav.records).length,
+                  recordKeys: Object.keys(bookingForNav.records),
+                  firstRecordKey: Object.keys(bookingForNav.records)[0],
+                  firstRecord: bookingForNav.records[Object.keys(bookingForNav.records)[0]],
+                });
+              }
+              
+              const navParams = {
+                chatId,
+                serviceKey: firstRecord?.serviceKey,
+                booking: bookingForNav,
+              };
+              if (createdRecords.length > 1 && firstRecord?.batchId) {
+                navParams.batchId = firstRecord.batchId;
+              }
+              
+              if (__DEV__) {
+                console.log('[FakePayment] Navigating to BookingConfirmation with params:', {
+                  chatId: navParams.chatId,
+                  serviceKey: navParams.serviceKey,
+                  batchId: navParams.batchId,
+                  bookingHasRecords: !!navParams.booking?.records,
+                  bookingRecordsCount: navParams.booking?.records ? Object.keys(navParams.booking.records).length : 0,
+                  bookingRecordsKeys: navParams.booking?.records ? Object.keys(navParams.booking.records) : [],
+                  firstRecord: navParams.booking?.records ? navParams.booking.records[Object.keys(navParams.booking.records)[0]] : null,
+                });
+              }
+
+              setTimeout(() => {
+                resetForm();
+                navigation.replace("BookingConfirmation", navParams);
+              }, 900);
+              return;
+            }
+          } else {
+            if (__DEV__) {
+              console.warn('[FakePayment] Chat not found for chatId:', chatId);
+            }
+          }
+        } else {
+          if (__DEV__) {
+            console.warn('[FakePayment] No chatId available. Cannot save booking.');
+            console.warn('[FakePayment] Available chatIds:', store.chats?.map(c => c.id));
           }
         }
       } catch (err) {
-        if (__DEV__) console.warn("Failed to record booking", err);
+        if (__DEV__) {
+          console.error("Failed to record booking", err);
+          console.error(err.stack);
+        }
       }
 
       // small delay so user sees success state then return to chat
@@ -145,7 +345,11 @@ export default function FakePayment({ route, navigation }) {
   const handleCardPay = () => {
     const err = validateCard();
     if (err) {
-      Alert.alert("Card details", err);
+      showPremiumAlert({
+        title: "Card details",
+        message: err,
+        variant: "warning",
+      });
       return;
     }
     finishPayment();
@@ -153,7 +357,11 @@ export default function FakePayment({ route, navigation }) {
 
   const handlePaypalPay = () => {
     if (!paypalEmail || !paypalEmail.includes("@")) {
-      Alert.alert("PayPal", "Enter a valid PayPal email.");
+      showPremiumAlert({
+        title: "PayPal",
+        message: "Enter a valid PayPal email.",
+        variant: "warning",
+      });
       return;
     }
     finishPayment();
@@ -393,6 +601,7 @@ export default function FakePayment({ route, navigation }) {
             This is a demo. No real payment will be taken in this build.
           </Text>
         </ScrollView>
+        {premiumAlert}
 
         {/* Reusable bottom sheet modal for Apple Pay and PayPal confirmation */}
         <Modal

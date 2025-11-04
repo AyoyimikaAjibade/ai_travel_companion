@@ -1,5 +1,5 @@
 // src/screens/BookingCheckoutClone.js
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,14 +9,17 @@ import {
   Image,
   StatusBar,
   Platform,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SPACING } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
+import PassengersForm, {
+  createPassenger,
+} from "../components/PassengersForm";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
+import { usePremiumAlert } from "../components/PremiumAlert";
 
 const BOOKING_BLUE = "#003580";
 const BOOKING_YELLOW = "#FFB700";
@@ -25,6 +28,10 @@ const logoUri =
 
 const BookingCheckoutClone = ({ route, navigation }) => {
   const { data = {}, currency = "USD" } = route.params || {};
+  const serviceKey = route.params?.serviceKey;
+  const serviceType = route.params?.serviceType ?? "hotel";
+  const basePlanId = route.params?.basePlanId;
+  const chatId = route.params?.chatId;
   const { convertCurrency, targetCurrency } = useCurrencyConverter();
   const displayCurrency = targetCurrency || currency;
   const basePrice = Number(data?.price ?? 360);
@@ -32,6 +39,49 @@ const BookingCheckoutClone = ({ route, navigation }) => {
   const taxes = subtotal * 0.18;
   const twosFee = subtotal * 0.05;
   const total = subtotal + taxes + twosFee;
+  const maxGuests = useMemo(() => {
+    const candidates = [
+      data?.maxGuests,
+      data?.max_guests,
+      data?.capacity,
+      data?.maxOccupancy,
+    ];
+    for (const candidate of candidates) {
+      const parsed = parseInt(candidate, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    if (typeof data?.guests === "string") {
+      const parsed = parseInt(data.guests, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 4;
+  }, [data]);
+
+  const initialPassengers = useMemo(() => {
+    if (Array.isArray(data?.passengers) && data.passengers.length) {
+      return data.passengers.map((passenger) => {
+        const base = createPassenger({ type: "guest" });
+        return {
+          ...base,
+          ...passenger,
+          id: passenger.id ?? base.id,
+        };
+      });
+    }
+    const defaultCount = Math.min(
+      Math.max(parseInt(data?.guests, 10) || 1, 1),
+      maxGuests
+    );
+    return Array.from({ length: defaultCount }, () =>
+      createPassenger({ type: "guest" })
+    );
+  }, [data?.passengers, data?.guests, maxGuests]);
+
+  const [passengers, setPassengers] = useState(initialPassengers);
   const [traveler, setTraveler] = useState({
     name: data.traveler ?? "",
     email: data.email ?? "",
@@ -42,21 +92,45 @@ const BookingCheckoutClone = ({ route, navigation }) => {
     traveler.name.trim().length > 0 &&
     traveler.email.trim().length > 0 &&
     traveler.phone.trim().length >= 6;
+  const passengersValid = passengers.every(
+    (p) =>
+      typeof p?.firstName === "string" &&
+      p.firstName.trim().length > 0 &&
+      typeof p?.lastName === "string" &&
+      p.lastName.trim().length > 0
+  );
+  const [showPremiumAlert, premiumAlert] = usePremiumAlert();
 
   const handlePay = () => {
     if (!travelerValid) {
-      Alert.alert(
-        "Traveler details",
-        "Please complete traveler information before continuing."
-      );
+      showPremiumAlert({
+        title: "Reservation contact",
+        message:
+          "Please complete traveler information before continuing.",
+        variant: "warning",
+      });
+      return;
+    }
+    if (!passengersValid) {
+      showPremiumAlert({
+        title: "Guest names",
+        message: "Please add the names for each guest before continuing.",
+        variant: "warning",
+      });
       return;
     }
     navigation.navigate("FakePayment", {
       provider: "Booking.com",
       type: "hotel",
+      serviceType,
+      serviceKey,
+      basePlanId,
+      chatId,
       data: {
         ...data,
         traveler,
+        passengers,
+        maxGuests,
         price: subtotal,
         currency: displayCurrency,
       },
@@ -178,7 +252,7 @@ const BookingCheckoutClone = ({ route, navigation }) => {
 
             <View style={styles.lightDivider} />
 
-            <View style={[styles.feeRow, { marginTop: SPACING.sm }]}>
+            <View style={[styles.feeRow, { marginTop: SPACING.sm }]}> 
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>
                 {formatCurrency(total, displayCurrency)}
@@ -187,7 +261,36 @@ const BookingCheckoutClone = ({ route, navigation }) => {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Traveler information</Text>
+            <Text style={styles.sectionTitle}>
+              Guests ({passengers.length}/{maxGuests})
+            </Text>
+            {passengers.map((passenger, index) => (
+              <View key={passenger.id ?? `guest-${index}`} style={styles.guestRow}>
+                <Text style={styles.guestLabelText}>Guest {index + 1}</Text>
+                <Text style={styles.guestValue}>
+                  {`${passenger.firstName ?? ""} ${passenger.lastName ?? ""}`.trim() || "—"}
+                </Text>
+              </View>
+            ))}
+            <Text style={styles.guestHint}>Max guests per room: {maxGuests}</Text>
+          </View>
+
+          <View
+            style={{
+              marginTop: SPACING.md,
+              marginHorizontal: SPACING.md,
+            }}
+          >
+            <PassengersForm
+              value={passengers}
+              onChange={setPassengers}
+              maxCount={maxGuests}
+              showTypeToggle={false}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Reservation contact</Text>
             <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
           </View>
 
@@ -201,6 +304,7 @@ const BookingCheckoutClone = ({ route, navigation }) => {
 
           {/* spacing so CTA isn't covered */}
           <View style={{ height: 180 }} />
+          {premiumAlert}
         </ScrollView>
 
         {/* Sticky bottom CTA: anchored to bottom of safeBody */}
@@ -330,6 +434,26 @@ const styles = StyleSheet.create({
   },
   feeLabel: { color: "#555" },
   feeValue: { color: "#111" },
+
+  guestRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
+  guestLabelText: {
+    color: "#555",
+    fontSize: 13,
+  },
+  guestValue: {
+    color: "#111",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  guestHint: {
+    marginTop: 6,
+    color: "#666",
+    fontSize: 12,
+  },
 
   lightDivider: {
     borderBottomColor: "#f3f3f3",

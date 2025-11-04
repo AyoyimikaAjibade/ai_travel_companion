@@ -603,7 +603,6 @@ class ChatScreenClass extends React.Component {
         plan={item.plan}
         navigation={this.props.navigation}
         chatId={this.currentChatId}
-        isBooked={this.state.chatStatus === "booked"}
         booking={this.state.booking}
       />
     );
@@ -666,6 +665,7 @@ class ChatScreenClass extends React.Component {
               data={messages}
               renderItem={this.renderMessage}
               keyExtractor={(item) => item.id || this.generateId()}
+              extraData={{ booking: this.state.booking, status: this.state.chatStatus }}
               style={styles.messagesList}
               contentContainerStyle={styles.messagesContainer}
               keyboardShouldPersistTaps="handled"
