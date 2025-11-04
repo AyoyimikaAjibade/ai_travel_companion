@@ -54,6 +54,9 @@ services:
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
       WEATHER_API_KEY: ${WEATHER_API_KEY}
       
+      # AI Service Configuration
+      AI_SERVICE_BASE_URL: http://ai_service:8001
+      
       # Email (optional)
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -90,7 +93,7 @@ services:
       start_period: 40s
     restart: unless-stopped
 
-  # AI Service (Optional - for separate AI processing)
+  # AI Service
   ai_service:
     build:
       context: ./ai
@@ -100,13 +103,19 @@ services:
       - "8001:8001"
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      AMADEUS_API_KEY: ${AMADEUS_API_KEY}
+      AMADEUS_API_SECRET: ${AMADEUS_API_SECRET}
     networks:
       - ai_travel_network
-    profiles:
-      - ai-service
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  # Redis for caching (Optional)
+  # Redis for caching
   redis:
     image: redis:7-alpine
     container_name: ai_travel_redis
@@ -116,9 +125,13 @@ services:
       - redis_data:/data
     networks:
       - ai_travel_network
-    profiles:
-      - cache
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # Nginx reverse proxy (Optional)
   nginx:

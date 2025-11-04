@@ -10,6 +10,7 @@
 # Python virtual environments
 twos_venv/
 venv/
+ai_venv/
 env/
 .venv/
 ENV/

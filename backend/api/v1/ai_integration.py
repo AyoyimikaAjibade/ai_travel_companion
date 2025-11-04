@@ -60,6 +60,11 @@ async def parse_chat_message(
         
         slot_id = request_data.get("slot_id")
         
+        # Initialize variables to avoid UnboundLocalError
+        returned_slots = {}
+        missing_fields = []
+        ai_response = {}
+        
         # Call AI service
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -72,8 +77,11 @@ async def parse_chat_message(
             response.raise_for_status()
             ai_response = response.json()
         
-        # Extract slot_id from response if not provided
+        # Extract data from AI response
         returned_slots = ai_response.get("current_slots", {})
+        missing_fields = ai_response.get("missing", [])
+        
+        # Extract slot_id from response if not provided
         if not slot_id and returned_slots.get("slot_id"):
             slot_id = returned_slots.get("slot_id")
         
@@ -126,7 +134,6 @@ async def parse_chat_message(
             )
             
             # Save AI response message
-            missing_fields = ai_response.get("missing", [])
             bot_message = f"Missing information: {', '.join(missing_fields)}" if missing_fields else "All information collected!"
             
             chat_message_service.save_message_to_cache(
@@ -156,15 +163,42 @@ async def parse_chat_message(
             "ready_for_search": len(missing_fields) == 0
         }
     
-    except httpx.HTTPError as e:
+    except httpx.ConnectError as e:
+        error_msg = f"Failed to connect to AI service at {AI_SERVICE_BASE_URL}. Please ensure the AI service is running."
+        print(f"❌ Connection Error: {error_msg} - {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"AI service unavailable: {str(e)}"
+            detail=error_msg
+        )
+    except httpx.TimeoutException as e:
+        error_msg = f"AI service at {AI_SERVICE_BASE_URL} did not respond in time."
+        print(f"❌ Timeout Error: {error_msg} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=error_msg
+        )
+    except httpx.HTTPStatusError as e:
+        error_msg = f"AI service returned error {e.response.status_code}: {e.response.text}"
+        print(f"❌ HTTP Status Error: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI service error: {e.response.status_code}"
+        )
+    except httpx.HTTPError as e:
+        error_msg = f"AI service unavailable: {str(e)}"
+        print(f"❌ HTTP Error: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=error_msg
         )
     except Exception as e:
+        import traceback
+        error_msg = f"Error processing chat message: {str(e)}"
+        print(f"❌ Unexpected Error: {error_msg}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing chat message: {str(e)}"
+            detail=error_msg
         )
 
 
@@ -261,15 +295,42 @@ async def search_travel_options(
             "plan": plan_data
         }
     
-    except httpx.HTTPError as e:
+    except httpx.ConnectError as e:
+        error_msg = f"Failed to connect to AI service at {AI_SERVICE_BASE_URL}. Please ensure the AI service is running."
+        print(f"❌ Connection Error: {error_msg} - {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"AI service unavailable: {str(e)}"
+            detail=error_msg
+        )
+    except httpx.TimeoutException as e:
+        error_msg = f"AI service at {AI_SERVICE_BASE_URL} did not respond in time."
+        print(f"❌ Timeout Error: {error_msg} - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=error_msg
+        )
+    except httpx.HTTPStatusError as e:
+        error_msg = f"AI service returned error {e.response.status_code}: {e.response.text}"
+        print(f"❌ HTTP Status Error: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI service error: {e.response.status_code}"
+        )
+    except httpx.HTTPError as e:
+        error_msg = f"AI service unavailable: {str(e)}"
+        print(f"❌ HTTP Error: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=error_msg
         )
     except Exception as e:
+        import traceback
+        error_msg = f"Error searching travel options: {str(e)}"
+        print(f"❌ Unexpected Error: {error_msg}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error searching travel options: {str(e)}"
+            detail=error_msg
         )
 
 
