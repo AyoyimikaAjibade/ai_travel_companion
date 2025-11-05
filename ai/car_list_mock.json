@@ -79,6 +79,110 @@
       "price_per_day": 90.0,
       "currency": "USD",
       "link": "https://www.thrifty.com/Cars/VehicleGuide"
+    },
+    {
+      "company": "Enterprise",
+      "vehicle_brand": "Nissan Versa",
+      "car_type": "Sedan - Economy",
+      "price_per_day": 36.0,
+      "currency": "USD",
+      "link": "https://www.enterprise.com/en/car-rental/vehicles/us/cars/economy.html"
+    },
+    {
+      "company": "Hertz",
+      "vehicle_brand": "BMW 3 Series",
+      "car_type": "Sedan - Luxury",
+      "price_per_day": 129.0,
+      "currency": "USD",
+      "link": "https://www.hertz.com/rentacar/vehicle-guide"
+    },
+    {
+      "company": "Avis",
+      "vehicle_brand": "Ford Mustang Convertible",
+      "car_type": "Convertible",
+      "price_per_day": 145.0,
+      "currency": "USD",
+      "link": "https://www.avis.com/en/vehicles/us"
+    },
+    {
+      "company": "Budget",
+      "vehicle_brand": "Tesla Model 3",
+      "car_type": "Electric - Sedan",
+      "price_per_day": 110.0,
+      "currency": "USD",
+      "link": "https://www.budget.com/en/vehicles/us"
+    },
+    {
+      "company": "Alamo",
+      "vehicle_brand": "Audi Q7",
+      "car_type": "SUV - Premium",
+      "price_per_day": 155.0,
+      "currency": "USD",
+      "link": "https://www.alamo.com/en/car-types/suv.html"
+    },
+    {
+      "company": "National",
+      "vehicle_brand": "Toyota RAV4",
+      "car_type": "SUV - Compact",
+      "price_per_day": 68.0,
+      "currency": "USD",
+      "link": "https://www.nationalcar.com/en/car-types/suv.html"
+    },
+    {
+      "company": "Sixt",
+      "vehicle_brand": "Volkswagen Passat",
+      "car_type": "Sedan - Intermediate",
+      "price_per_day": 59.0,
+      "currency": "USD",
+      "link": "https://www.sixt.com/fleet/cars/"
+    },
+    {
+      "company": "Fox Rent A Car",
+      "vehicle_brand": "Kia Rio",
+      "car_type": "Sedan - Compact",
+      "price_per_day": 39.0,
+      "currency": "USD",
+      "link": "https://www.foxrentacar.com/en/rental-cars.html"
+    },
+    {
+      "company": "Dollar",
+      "vehicle_brand": "Subaru Outback",
+      "car_type": "Wagon",
+      "price_per_day": 77.0,
+      "currency": "USD",
+      "link": "https://www.dollar.com/Cars/VehicleGuide"
+    },
+    {
+      "company": "Thrifty",
+      "vehicle_brand": "Chevrolet Suburban",
+      "car_type": "SUV - Full",
+      "price_per_day": 132.0,
+      "currency": "USD",
+      "link": "https://www.thrifty.com/Cars/VehicleGuide"
+    },
+    {
+      "company": "Enterprise",
+      "vehicle_brand": "Ford Transit Passenger Van",
+      "car_type": "Van - 12 Passenger",
+      "price_per_day": 165.0,
+      "currency": "USD",
+      "link": "https://www.enterprise.com/en/car-rental/vehicles/us/vans/12-passenger-van.html"
+    },
+    {
+      "company": "Hertz",
+      "vehicle_brand": "Tesla Model Y",
+      "car_type": "Electric - SUV",
+      "price_per_day": 128.0,
+      "currency": "USD",
+      "link": "https://www.hertz.com/rentacar/vehicle-guide"
+    },
+    {
+      "company": "Sixt",
+      "vehicle_brand": "Porsche 718 Cayman",
+      "car_type": "Sports Car",
+      "price_per_day": 245.0,
+      "currency": "USD",
+      "link": "https://www.sixt.com/fleet/premium-cars/"
     }
   ]
 }
