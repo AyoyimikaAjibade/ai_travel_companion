@@ -1,5 +1,5 @@
 """
-Chat management API endpoints.
+Chat message management API endpoints.
 """
 
 from typing import List, Any
@@ -7,36 +7,28 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from dependencies import get_db, get_chat_service
+from dependencies import get_db, get_chat_message_service, get_chat_service
+from services.chat_message_service import ChatMessageService
 from services.chat_service import ChatService
-from models.chat import ChatPublic
+from models.chat_message import ChatMessage
 from core.security import get_current_active_user
 from models.user import User
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ChatPublic])
-def get_user_chats(
+@router.get("/{chat_id}/messages", response_model=List[ChatMessage])
+def get_chat_messages(
+    chat_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db),
+    chat_message_service: ChatMessageService = Depends(get_chat_message_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    """Get all chats for the current user."""
-    chats = chat_service.get_user_chats(db, current_user.id, skip=skip, limit=limit)
-    return chats
-
-
-@router.get("/{chat_id}", response_model=ChatPublic)
-def get_chat(
-    chat_id: UUID,
-    db: Session = Depends(get_db),
-    chat_service: ChatService = Depends(get_chat_service),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """Get a specific chat."""
+    """Get all messages for a specific chat."""
+    # Verify chat exists and user owns it
     chat = chat_service.get_by_id(db, chat_id)
     if not chat:
         raise HTTPException(
@@ -44,24 +36,28 @@ def get_chat(
             detail="Chat not found"
         )
     
-    # Check if user owns the chat
     if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
     
-    return chat
+    messages = chat_message_service.get_chat_messages(db, chat_id, skip=skip, limit=limit)
+    return messages
 
 
-@router.get("/slot/{slot_id}", response_model=ChatPublic)
-def get_chat_by_slot_id(
+@router.get("/slot/{slot_id}/messages", response_model=List[ChatMessage])
+def get_messages_by_slot_id(
     slot_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
     db: Session = Depends(get_db),
+    chat_message_service: ChatMessageService = Depends(get_chat_message_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
-    """Get a chat by slot_id (AI service chat ID)."""
+    """Get all messages for a specific slot_id (AI service chat ID)."""
+    # Verify chat exists and user owns it
     chat = chat_service.get_chat_by_slot_id(db, slot_id)
     if not chat:
         raise HTTPException(
@@ -69,29 +65,12 @@ def get_chat_by_slot_id(
             detail="Chat not found"
         )
     
-    # Check if user owns the chat
     if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
     
-    return chat
+    messages = chat_message_service.get_messages_by_slot_id(db, slot_id, skip=skip, limit=limit)
+    return messages
 
-
-@router.delete("/{chat_id}")
-def delete_chat(
-    chat_id: UUID,
-    db: Session = Depends(get_db),
-    chat_service: ChatService = Depends(get_chat_service),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """Delete a chat."""
-    success = chat_service.delete_chat(db, chat_id, current_user.id)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chat not found or not owned by user"
-        )
-    
-    return {"message": "Chat deleted successfully"}

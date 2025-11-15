@@ -9,7 +9,6 @@ from uuid import UUID
 from .base_service import BaseService
 from repositories.plan_repository import PlanRepository
 from models.plan import Plan, PlanCreate, PlanUpdate
-from core.cache import cache_service
 
 
 class PlanService(BaseService[Plan]):
@@ -27,29 +26,25 @@ class PlanService(BaseService[Plan]):
         """Create a new plan."""
         return self.plan_repository.create(db, plan_create)
     
-    def create_plan_draft(self, chat_id: UUID, slot_id: str, plan_data: Dict[str, Any]) -> bool:
-        """Save a draft plan to Redis cache (not yet in database)."""
-        return cache_service.save_plan_draft(str(chat_id), slot_id, plan_data)
-    
-    def get_plan_draft(self, chat_id: UUID, slot_id: str) -> Optional[Dict[str, Any]]:
-        """Get a draft plan from Redis cache."""
-        return cache_service.get_plan_draft(str(chat_id), slot_id)
-    
-    def get_all_draft_plans(self, chat_id: UUID) -> List[Dict[str, Any]]:
-        """Get all draft plans for a chat from Redis."""
-        return cache_service.get_all_draft_plans(str(chat_id))
-    
-    def update_plan_draft(self, chat_id: UUID, slot_id: str, plan_data: Dict[str, Any]) -> bool:
-        """Update a draft plan in Redis cache."""
-        return cache_service.save_plan_draft(str(chat_id), slot_id, plan_data)
-    
-    def delete_plan_draft(self, chat_id: UUID, slot_id: str) -> bool:
-        """Delete a draft plan from Redis cache."""
-        return cache_service.delete_plan_draft(str(chat_id), slot_id)
-    
     def confirm_plan(self, db: Session, chat_id: UUID, slot_id: str, plan_data: Dict[str, Any]) -> Plan:
-        """Confirm and save a plan from Redis cache to PostgreSQL database."""
-        # Create plan from cached data
+        """
+        Save a plan directly to PostgreSQL database.
+        
+        This method can be used to:
+        - Save plans from AI service responses
+        - Save manually created/edited plans
+        - Save plans from any source
+        
+        Args:
+            db: Database session
+            chat_id: Chat ID this plan belongs to
+            slot_id: Slot ID for tracking (optional, can be empty string)
+            plan_data: Plan data dictionary
+        
+        Returns:
+            Created Plan object
+        """
+        # Create plan from data
         plan_create = PlanCreate(
             chat_id=chat_id,
             total_price=plan_data.get('total_price', 0),
@@ -65,24 +60,7 @@ class PlanService(BaseService[Plan]):
         )
         
         plan = self.create_plan(db, plan_create)
-        
-        # Delete from cache after successful save
-        cache_service.delete_plan_draft(str(chat_id), slot_id)
-        
         return plan
-    
-    def bulk_confirm_plans(self, db: Session, chat_id: UUID, slot_ids: List[str]) -> List[Plan]:
-        """Bulk confirm multiple plans from Redis cache to PostgreSQL."""
-        confirmed_plans = []
-        
-        for slot_id in slot_ids:
-            plan_data = cache_service.get_plan_draft(str(chat_id), slot_id)
-            if plan_data:
-                plan = self.confirm_plan(db, chat_id, slot_id, plan_data)
-                if plan:
-                    confirmed_plans.append(plan)
-        
-        return confirmed_plans
     
     def get_best_plans(self, db: Session, chat_id: UUID, limit: int = 5) -> List[Plan]:
         """Get best plans for a chat ordered by score."""
@@ -129,8 +107,15 @@ class PlanService(BaseService[Plan]):
             completeness_score += 2
         if plan_data.get('car_data'):
             completeness_score += 1
-        if plan_data.get('attractions_data'):
-            completeness_score += 1
+        
+        # Handle attractions_data - can be dict with "items" key or list
+        attractions_data = plan_data.get('attractions_data')
+        if attractions_data:
+            if isinstance(attractions_data, dict) and attractions_data.get("items"):
+                if len(attractions_data.get("items", [])) > 0:
+                    completeness_score += 1
+            elif isinstance(attractions_data, list) and len(attractions_data) > 0:
+                completeness_score += 1
         
         # Combine scores (you would implement more sophisticated logic)
         final_score = min(10, (base_score + price_score + completeness_score) / 3)

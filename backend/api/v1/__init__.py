@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from core.config import settings
 
 # Import all API route modules
-from . import auth, users, chats, plans, ai_integration
+from . import auth, users, chats, chat_messages, plans, ai_integration
 
 # Create main API router
 api_router = APIRouter()
@@ -28,6 +28,12 @@ api_router.include_router(
     chats.router,
     prefix="/chats",
     tags=["chats"]
+)
+
+api_router.include_router(
+    chat_messages.router,
+    prefix="/chats",
+    tags=["chat_messages"]
 )
 
 api_router.include_router(
