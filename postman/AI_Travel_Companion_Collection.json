@@ -431,66 +431,6 @@
           }
         },
         {
-          "name": "Create Chat",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 200 || pm.response.code === 201) {",
-                  "    const responseData = pm.response.json();",
-                  "    pm.environment.set('chat_id', responseData.id);",
-                  "    if (responseData.slot_id) {",
-                  "        pm.environment.set('slot_id', responseData.slot_id);",
-                  "    }",
-                  "    console.log('Chat created with ID:', responseData.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"slot_id\": null,\n  \"origin_code\": \"SFO\",\n  \"origin_name\": \"San Francisco\",\n  \"destination_code\": \"LHR\",\n  \"destination_name\": \"London\",\n  \"start_date\": \"2024-06-01\",\n  \"end_date\": \"2024-06-07\",\n  \"adults\": 2,\n  \"budget\": 2000.00,\n  \"status\": \"draft\"\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/chats",
-              "host": ["{{full_url}}"],
-              "path": ["chats"]
-            }
-          }
-        },
-        {
-          "name": "Update Chat",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"budget\": 2500.00,\n  \"status\": \"planned\"\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/chats/{{chat_id}}",
-              "host": ["{{full_url}}"],
-              "path": ["chats", "{{chat_id}}"]
-            }
-          }
-        },
-        {
           "name": "Delete Chat",
           "request": {
             "method": "DELETE",
@@ -503,92 +443,44 @@
           }
         },
         {
-          "name": "Get Shared Chat",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/chats/shared/{{share_code}}",
-              "host": ["{{full_url}}"],
-              "path": ["chats", "shared", "{{share_code}}"]
-            }
-          }
-        },
-        {
-          "name": "Search Chats",
+          "name": "Get Chat Messages",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{full_url}}/chats/search/?destination=London&budget_min=1000&budget_max=3000",
+              "raw": "{{full_url}}/chats/{{chat_id}}/messages?skip=0&limit=100",
               "host": ["{{full_url}}"],
-              "path": ["chats", "search", ""],
+              "path": ["chats", "{{chat_id}}", "messages"],
               "query": [
                 {
-                  "key": "destination",
-                  "value": "London"
+                  "key": "skip",
+                  "value": "0"
                 },
                 {
-                  "key": "budget_min",
-                  "value": "1000"
-                },
-                {
-                  "key": "budget_max",
-                  "value": "3000"
+                  "key": "limit",
+                  "value": "100"
                 }
               ]
             }
           }
         },
         {
-          "name": "Get Chat Stats",
+          "name": "Get Messages by Slot ID",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{full_url}}/chats/{{chat_id}}/stats",
+              "raw": "{{full_url}}/chats/slot/{{slot_id}}/messages?skip=0&limit=100",
               "host": ["{{full_url}}"],
-              "path": ["chats", "{{chat_id}}", "stats"]
-            }
-          }
-        },
-        {
-          "name": "Duplicate Chat",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/chats/{{chat_id}}/duplicate",
-              "host": ["{{full_url}}"],
-              "path": ["chats", "{{chat_id}}", "duplicate"]
-            }
-          }
-        },
-        {
-          "name": "Change Chat Status",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "\"confirmed\""
-            },
-            "url": {
-              "raw": "{{full_url}}/chats/{{chat_id}}/status?new_status=confirmed",
-              "host": ["{{full_url}}"],
-              "path": ["chats", "{{chat_id}}", "status"],
+              "path": ["chats", "slot", "{{slot_id}}", "messages"],
               "query": [
                 {
-                  "key": "new_status",
-                  "value": "confirmed"
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
                 }
               ]
             }
@@ -651,63 +543,6 @@
           }
         },
         {
-          "name": "Create Plan",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 200 || pm.response.code === 201) {",
-                  "    const responseData = pm.response.json();",
-                  "    pm.environment.set('plan_id', responseData.id);",
-                  "    console.log('Plan created with ID:', responseData.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"total_price\": 1899.99,\n  \"score\": 8.5,\n  \"explanation\": \"Great plan with flights and hotel\",\n  \"flight_data\": {\n    \"airline\": \"American Airlines\",\n    \"price\": 450.00,\n    \"departure_time\": \"2024-06-01T08:00:00Z\",\n    \"arrival_time\": \"2024-06-01T11:00:00Z\"\n  },\n  \"hotel_data\": {\n    \"name\": \"Grand Hotel\",\n    \"rating\": 4,\n    \"total_price\": 1200.00\n  },\n  \"attractions_data\": [{\n    \"name\": \"London Eye\",\n    \"price\": 30.00\n  }],\n  \"ai_generated\": true,\n  \"manual\": false\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/plans",
-              "host": ["{{full_url}}"],
-              "path": ["plans"]
-            }
-          }
-        },
-        {
-          "name": "Update Plan",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"total_price\": 1999.99,\n  \"score\": 9.0,\n  \"manual\": true\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/plans/{{plan_id}}",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "{{plan_id}}"]
-            }
-          }
-        },
-        {
           "name": "Delete Plan",
           "request": {
             "method": "DELETE",
@@ -718,129 +553,6 @@
               "path": ["plans", "{{plan_id}}"]
             }
           }
-        },
-        {
-          "name": "Get Best Plans",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/plans/chat/{{chat_id}}/best?limit=5",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "chat", "{{chat_id}}", "best"],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "5"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Cheapest Plans",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/plans/chat/{{chat_id}}/cheapest?limit=5",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "chat", "{{chat_id}}", "cheapest"],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "5"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get AI-Generated Plans",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/plans/chat/{{chat_id}}/ai-generated",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "chat", "{{chat_id}}", "ai-generated"]
-            }
-          }
-        },
-        {
-          "name": "Get Manual Plans",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/plans/chat/{{chat_id}}/manual",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "chat", "{{chat_id}}", "manual"]
-            }
-          }
-        },
-        {
-          "name": "Search Plans",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/plans/search/?chat_id={{chat_id}}&min_price=1000&max_price=3000&ai_generated=true",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "search", ""],
-              "query": [
-                {
-                  "key": "chat_id",
-                  "value": "{{chat_id}}"
-                },
-                {
-                  "key": "min_price",
-                  "value": "1000"
-                },
-                {
-                  "key": "max_price",
-                  "value": "3000"
-                },
-                {
-                  "key": "ai_generated",
-                  "value": "true"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Compare Plans",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "[\"{{plan_id}}\"]"
-            },
-            "url": {
-              "raw": "{{full_url}}/plans/compare",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "compare"]
-            }
-          }
-        },
-        {
-          "name": "Update Plan Score",
-          "request": {
-            "method": "PUT",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/plans/{{plan_id}}/score",
-              "host": ["{{full_url}}"],
-              "path": ["plans", "{{plan_id}}", "score"]
-            }
-          }
         }
       ]
     },
@@ -848,14 +560,14 @@
       "name": "🤖 AI Integration",
       "item": [
         {
-          "name": "Parse Chat Message",
+          "name": "Chat",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Parse successful', function () {",
+                  "pm.test('Chat successful', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
@@ -868,8 +580,7 @@
                   "        pm.environment.set('slot_id', responseData.slot_id);",
                   "    }",
                   "    console.log('Chat ID:', responseData.chat_id, 'Slot ID:', responseData.slot_id);",
-                  "    console.log('Missing fields:', responseData.missing);",
-                  "    console.log('Ready for search:', responseData.ready_for_search);",
+                  "    console.log('AI response keys:', Object.keys(responseData));",
                   "}"
                 ]
               }
@@ -888,14 +599,14 @@
               "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from November 10 to November 20 for 2 adults\",\n  \"current_slots\": null,\n  \"chat_id\": null,\n  \"slot_id\": null\n}"
             },
             "url": {
-              "raw": "{{full_url}}/ai/chat/parse",
+              "raw": "{{full_url}}/ai/chat",
               "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "parse"]
+              "path": ["ai", "chat"]
             }
           }
         },
         {
-          "name": "Continue Chat (Update Slots)",
+          "name": "Save Plan from Chat",
           "request": {
             "method": "POST",
             "header": [
@@ -906,134 +617,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"My budget is $5000\",\n  \"current_slots\": {\n    \"slot_id\": \"{{slot_id}}\",\n    \"origin_airport_code\": \"SFO\",\n    \"destination_airport_code\": \"CDG\",\n    \"destination_city_code\": \"PAR\",\n    \"dates\": {\n      \"start\": \"2024-11-10\",\n      \"end\": \"2024-11-20\"\n    },\n    \"pax\": {\n      \"adults\": 2,\n      \"kids\": 0\n    }\n  },\n  \"chat_id\": \"{{chat_id}}\",\n  \"slot_id\": \"{{slot_id}}\"\n}"
+              "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"slot_id\": \"{{slot_id}}\",\n  \"plan\": {\n    \"total_price\": 1500.00,\n    \"explanation\": \"A manually created plan for testing.\",\n    \"flight_data\": {\n      \"airline\": \"Manual Air\",\n      \"price\": 300.00\n    },\n    \"hotel_data\": {\n      \"name\": \"Manual Stay\",\n      \"total_price\": 1000.00\n    },\n    \"ai_generated\": false,\n    \"manual\": true\n  }\n}"
             },
             "url": {
-              "raw": "{{full_url}}/ai/chat/parse",
+              "raw": "{{full_url}}/ai/chat/plan",
               "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "parse"]
-            }
-          }
-        },
-        {
-          "name": "Search Travel Options",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Search successful', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "if (pm.response.code === 200) {",
-                  "    const responseData = pm.response.json();",
-                  "    console.log('Plan generated and saved to cache');",
-                  "    console.log('Plan data:', JSON.stringify(responseData.plan, null, 2));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"slot_id\": \"{{slot_id}}\"\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/ai/chat/search",
-              "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "search"]
-            }
-          }
-        },
-        {
-          "name": "Get Draft Plans",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{full_url}}/ai/chat/{{chat_id}}/drafts?slot_id={{slot_id}}",
-              "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "{{chat_id}}", "drafts"],
-              "query": [
-                {
-                  "key": "slot_id",
-                  "value": "{{slot_id}}"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Draft Plan",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"total_price\": 2200.00,\n  \"hotel_data\": {\n    \"name\": \"Luxury Hotel\",\n    \"rating\": 5,\n    \"total_price\": 1500.00\n  },\n  \"manual\": true\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/ai/chat/{{chat_id}}/drafts/{{slot_id}}",
-              "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "{{chat_id}}", "drafts", "{{slot_id}}"]
-            }
-          }
-        },
-        {
-          "name": "Confirm Chat and Plans",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Confirmation successful', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "if (pm.response.code === 200) {",
-                  "    const responseData = pm.response.json();",
-                  "    console.log('Confirmed plans count:', responseData.confirmed_plans_count);",
-                  "    console.log('Confirmed messages count:', responseData.confirmed_messages_count);",
-                  "    if (responseData.plans && responseData.plans.length > 0) {",
-                  "        pm.environment.set('plan_id', responseData.plans[0].id);",
-                  "    }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"slot_ids\": [\"{{slot_id}}\"]\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/ai/chat/{{chat_id}}/confirm",
-              "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "{{chat_id}}", "confirm"]
+              "path": ["ai", "chat", "plan"]
             }
           }
         }
@@ -1041,3 +630,5 @@
     }
   ]
 }
+
+

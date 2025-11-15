@@ -1,6 +1,6 @@
 # AI Travel Companion
 
-An intelligent travel planning application that uses AI to help users create personalized travel plans through natural language conversations. The system consists of a FastAPI backend, React Native mobile frontend, and AI-powered natural language processing capabilities with Redis caching.
+An intelligent travel planning application that uses AI to help users create personalized travel plans through natural language conversations. The system consists of a FastAPI backend, React Native mobile frontend, and AI-powered natural language processing capabilities.
 
 ## 📋 Table of Contents
 
@@ -15,6 +15,7 @@ An intelligent travel planning application that uses AI to help users create per
   - [AI Service Setup](#ai-service-setup)
 - [Environment Configuration](#environment-configuration)
 - [API Documentation](#api-documentation)
+- [AI Service Integration](#ai-service-integration)
 - [Project Structure](#project-structure)
 - [Development](#development)
 - [Testing](#testing)
@@ -26,15 +27,23 @@ An intelligent travel planning application that uses AI to help users create per
 
 The AI Travel Companion is a modern travel planning platform that leverages artificial intelligence to simplify travel planning. Users can describe their travel preferences in natural language, and the system automatically generates comprehensive travel plans including flights, accommodations, car rentals, and activities.
 
+### Key Capabilities
+
+- **Natural Language Processing**: Uses Google Gemini 2.0 Flash to parse user messages into structured travel data
+- **Automatic Travel Search**: Integrates with Amadeus APIs to find flights, hotels, attractions, and cars
+- **Conversation Management**: Tracks user interactions using `slot_id` (ULID) for session continuity
+- **Plan Generation**: Automatically generates travel plans when all required information is collected
+- **Direct Persistence**: All chat messages and plans are saved directly to PostgreSQL database
+
 ## ✨ Features
 
 ### Core Features
 - **AI-Powered Chat Interface**: Natural language travel planning through conversational UI
 - **Intelligent Plan Generation**: Automatic travel plan generation based on user preferences
-- **Plan Management**: Create, compare, and manage travel plans with AI-generated and manual options
-- **Redis Caching**: Fast draft plan editing with Redis cache before final confirmation
-- **User Authentication**: Secure user registration and login system
+- **Plan Management**: Create, view, and manage travel plans with AI-generated options
+- **User Authentication**: Secure user registration and login system with JWT tokens
 - **Chat History**: Save and manage conversation history and travel plans
+- **Session Continuity**: Track conversations across multiple messages and devices using slot_id
 
 ### Frontend Features
 - **Onboarding Experience**: Guided introduction to app features
@@ -45,20 +54,71 @@ The AI Travel Companion is a modern travel planning platform that leverages arti
 
 ### Backend Features
 - **RESTful API**: Comprehensive API for all travel planning operations
-- **User Management**: Authentication, authorization, and user profiles with username support
-- **Chat & Plan Management**: CRUD operations for chats and plans with Redis caching
+- **User Management**: Authentication, authorization, and user profiles
+- **Chat & Plan Management**: CRUD operations for chats and plans
 - **AI Integration**: Natural language processing with Google Gemini for chat parsing and plan generation
-- **Redis Cache Layer**: Draft plans and messages stored in Redis for fast editing before PostgreSQL persistence
 - **Enhanced Authentication**: JWT-based auth with logout, password reset, and temporary passwords
+- **Error Handling**: Comprehensive error handling with proper HTTP status codes and logging
 
 ## 🏗️ Architecture
 
 The application follows a microservices architecture with clear separation of concerns:
 
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (React Native)                  │
+│                    Expo SDK 53, React Navigation            │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        │ HTTP/REST API
+                        │
+┌───────────────────────▼─────────────────────────────────────┐
+│              Backend Service (FastAPI)                      │
+│              Port 8000                                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   API Layer  │  │  Service     │  │ Repository   │      │
+│  │  (Endpoints) │─▶│  (Business   │─▶│  (Data Access)│      │
+│  │              │  │   Logic)     │  │              │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│         │                  │                    │          │
+│         └──────────────────┼────────────────────┘          │
+│                            │                               │
+│  ┌─────────────────────────┴───────────────────────────┐  │
+│  │              PostgreSQL Database                      │  │
+│  │  (Users, Chats, Plans, ChatMessages)                 │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                            │                               │
+│         ┌──────────────────┴──────────────────┐          │
+│         │                                       │          │
+└─────────┼───────────────────────────────────────┼──────────┘
+          │                                       │
+          │ HTTP/REST API                         │
+          │                                       │
+┌─────────▼───────────────────────────────────────▼──────────┐
+│              AI Service (FastAPI)                           │
+│              Port 8001                                      │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │   FastAPI    │───▶│   Models     │───▶│   Services  │ │
+│  │  Endpoints   │    │  (Pydantic)  │    │  (Business  │ │
+│  │              │    │              │    │   Logic)    │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│         │                    │                    │       │
+│         └────────────────────┼────────────────────┘       │
+│                              │                            │
+│  ┌───────────────────────────┴───────────────────────────┐ │
+│  │              External API Integrations               │ │
+│  ├──────────────────┬──────────────────┬─────────────────┤ │
+│  │  Google Gemini   │   Amadeus APIs   │   Mock Data     │ │
+│  │  (NLP Parsing)   │  (Travel Search) │  (Car Rental)   │ │
+│  └──────────────────┴──────────────────┴─────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Components
+
 - **Frontend**: React Native mobile application with Expo
 - **Backend**: FastAPI Python web service with PostgreSQL database
 - **AI Service**: Separate AI processing service using Google Gemini API for natural language understanding
-- **Cache Layer**: Redis for storing draft plans and chat messages before final confirmation
 - **Database**: PostgreSQL with SQLAlchemy ORM for persistent storage
 - **Authentication**: JWT-based authentication system
 
@@ -69,6 +129,7 @@ The application follows a microservices architecture with clear separation of co
 - **Database**: PostgreSQL with SQLAlchemy ORM
 - **Authentication**: JWT with python-jose
 - **Password Hashing**: bcrypt via passlib
+- **HTTP Client**: httpx for async API calls
 - **Testing**: pytest with async support
 - **Code Quality**: pylint, black, isort, mypy
 - **Migration**: Alembic
@@ -81,19 +142,21 @@ The application follows a microservices architecture with clear separation of co
 - **UI Components**: Custom components with Lucide icons
 - **Animations**: Lottie React Native
 
-### AI/ML
-- **AI Provider**: Google Gemini 1.5 Flash
-- **Processing**: Natural language understanding for travel planning
-- **Integration**: RESTful API endpoints for AI services
+### AI Service
+- **Framework**: FastAPI 0.100.0+
+- **AI/NLP**: Google Gemini 2.0 Flash
+- **Travel APIs**: Amadeus for Developers
+- **Data Validation**: Pydantic v2
+- **Session IDs**: ULID (Universally Unique Lexicographically Sortable Identifier)
+- **Runtime**: Python 3.9+, Uvicorn ASGI server
 
 ## 📋 Prerequisites
 
 Before setting up the project, ensure you have the following installed:
 
-- **Python 3.9+** (for backend)
+- **Python 3.9+** (for backend and AI service)
 - **Node.js 16+** and **npm** (for frontend)
 - **PostgreSQL 12+** (for database)
-- **Redis 6+** (for caching draft plans and messages)
 - **Git** (for version control)
 - **Expo CLI** (for React Native development)
 
@@ -152,6 +215,9 @@ Before setting up the project, ensure you have the following installed:
    # CORS
    CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://localhost:19006
    
+   # AI Service Configuration
+   AI_SERVICE_BASE_URL=http://localhost:8001
+   
    # External APIs
    GEMINI_API_KEY=your-gemini-api-key
    GOOGLE_MAPS_API_KEY=your-google-maps-api-key
@@ -182,7 +248,7 @@ Before setting up the project, ensure you have the following installed:
 
 2. **Install dependencies**
    ```bash
-npm install
+   npm install
    ```
 
 3. **Configure API endpoint**
@@ -212,9 +278,11 @@ npm install
    Ensure your `.env` file includes:
    ```env
    GEMINI_API_KEY=your-gemini-api-key
+   AMADEUS_API_KEY=your-amadeus-api-key
+   AMADEUS_API_SECRET=your-amadeus-api-secret
    ```
 
-3. **Run the AI service** (optional - for testing)
+3. **Run the AI service**
    ```bash
    python3 -m uvicorn ai_npu:app --reload --port 8001
    ```
@@ -232,14 +300,6 @@ Create a `.env` file in the backend directory with the following variables:
 ```env
 # Database Configuration
 DATABASE_URL=postgresql://username:password@localhost/twos_db
-
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=0
-REDIS_PASSWORD=
-CACHE_TTL_PLANS=86400
-CACHE_TTL_CHAT_MESSAGES=86400
 
 # AI Service Configuration
 AI_SERVICE_BASE_URL=http://localhost:8001
@@ -293,7 +353,13 @@ LOG_FILE=logs/app.log
    - Create a new API key
    - Add to your `.env` file
 
-2. **Google Maps API Key** (optional)
+2. **Amadeus API Keys** (for AI service)
+   - Visit [Amadeus for Developers](https://developers.amadeus.com/)
+   - Create a new app
+   - Get API key and secret
+   - Add to AI service `.env` file
+
+3. **Google Maps API Key** (optional)
    - Visit [Google Cloud Console](https://console.cloud.google.com/)
    - Enable Maps JavaScript API
    - Create credentials and add to `.env` file
@@ -320,71 +386,221 @@ The application uses JWT-based authentication with the following features:
 }
 ```
 
-**Note**: `first_name` and `last_name` fields are preserved in the user model for future user settings functionality but are not required for registration.
-
-#### Password Reset Flow
-1. User requests password reset with email
-2. System generates a temporary password
-3. User logs in with temporary password to get access token
-4. User changes password using change-password endpoint with access token
-
 ### Authentication Endpoints
-- `POST /api/v1/auth/register` - User registration (requires username, email, password only)
+- `POST /api/v1/auth/register` - User registration
 - `POST /api/v1/auth/login` - User login
 - `POST /api/v1/auth/refresh` - Refresh access token
 - `POST /api/v1/auth/logout` - User logout
-- `POST /api/v1/auth/password-reset-request` - Request password reset (generates temporary password)
-- `POST /api/v1/auth/change-password` - Change password (requires current password)
+- `POST /api/v1/auth/password-reset-request` - Request password reset
+- `POST /api/v1/auth/change-password` - Change password
 
 ### User Management
 - `GET /api/v1/users/me` - Get current user profile
 - `PUT /api/v1/users/me` - Update user profile
 
-### AI Chat Flow
-1. Frontend sends message → `/api/v1/ai/chat/parse`
-2. Backend proxies to AI service → Gemini parses message and extracts slots
-3. Messages saved to Redis cache for quick access
-4. When all information collected → `/api/v1/ai/chat/search`
-5. Plans generated → Saved to Redis cache as drafts
-6. User edits plans → Updated in Redis cache
-7. User confirms → `/api/v1/ai/chat/{chat_id}/confirm`
-8. All data (plans and messages) saved to PostgreSQL database
-
-### Redis Cache Structure
-
-- **Draft Plans**: `plan:draft:{chat_id}:{slot_id}` - Plans before user confirmation
-- **Chat Messages**: `messages:{chat_id}:{slot_id}` - Conversation history in cache
-- **Session Data**: `session:{chat_id}:{slot_id}` - Current slots and missing fields
-- **TTL**: 24 hours for all cached data
-
 ### Chat Management
 - `GET /api/v1/chats/` - Get user chats
-- `POST /api/v1/chats/` - Create new chat
 - `GET /api/v1/chats/{chat_id}` - Get specific chat
 - `GET /api/v1/chats/slot/{slot_id}` - Get chat by AI service slot_id
-- `PUT /api/v1/chats/{chat_id}` - Update chat
 - `DELETE /api/v1/chats/{chat_id}` - Delete chat
+- `GET /api/v1/chats/{chat_id}/messages` - Get chat messages
+- `GET /api/v1/chats/slot/{slot_id}/messages` - Get messages by slot_id
 
 ### Plan Management
 - `GET /api/v1/plans/chat/{chat_id}` - Get plans for chat
-- `POST /api/v1/plans/` - Create new plan
 - `GET /api/v1/plans/{plan_id}` - Get specific plan
-- `PUT /api/v1/plans/{plan_id}` - Update plan
 - `DELETE /api/v1/plans/{plan_id}` - Delete plan
-- `GET /api/v1/plans/chat/{chat_id}/best` - Get best scored plans
-- `GET /api/v1/plans/chat/{chat_id}/ai-generated` - Get AI-generated plans
-- `GET /api/v1/plans/chat/{chat_id}/manual` - Get manually edited plans
 
 ### AI Integration Endpoints
-- `POST /api/v1/ai/chat/parse` - Parse user chat message with AI service
-- `POST /api/v1/ai/chat/search` - Search travel options and generate plans
-- `GET /api/v1/ai/chat/{chat_id}/drafts` - Get draft plans from Redis cache
-- `PUT /api/v1/ai/chat/{chat_id}/drafts/{slot_id}` - Update draft plan in cache
-- `POST /api/v1/ai/chat/{chat_id}/confirm` - Confirm and save plans/messages to PostgreSQL
+- `POST /api/v1/ai/chat` - Chat with AI service (unified endpoint)
+- `POST /api/v1/ai/chat/plan` - Save plan from chat
 
 ### Health Check
 - `GET /api/v1/health` - API health status
 - `GET /` - Welcome message
+
+## 🤖 AI Service Integration
+
+### Overview
+
+The AI service is a FastAPI microservice that handles:
+- **Natural Language Processing (NLP)**: Uses Google Gemini to parse user messages into structured travel data
+- **Travel Search Integration**: Calls Amadeus APIs to find flights, hotels, attractions, and cars
+- **Conversation Management**: Tracks user interactions using `slot_id` (ULID) for session continuity
+- **Plan Generation**: Automatically generates travel plans when all required information is collected
+
+### AI Service Architecture
+
+```
+AI Service (Port 8001)
+    │
+    ├─▶ POST /chat - Main chat endpoint
+    │   ├─▶ Parses user message with Gemini
+    │   ├─▶ Merges with previous slots (preserves slot_id)
+    │   ├─▶ If complete: Searches travel options
+    │   │   ├─▶ Amadeus Flight Offers API
+    │   │   ├─▶ Amadeus Hotel Offers API
+    │   │   ├─▶ Amadeus Activities API
+    │   │   └─▶ Mock Car Rental (future: Amadeus Car API)
+    │   └─▶ Returns ParseResponse or TravelOptionsResponse
+    │
+    ├─▶ POST /search - Direct search (bypasses parsing)
+    └─▶ GET /health - Health check
+```
+
+### Data Flow
+
+#### 1. User Message Flow
+
+```
+User: "I want to fly from SF to Paris"
+    │
+    ▼
+Frontend → Backend: POST /api/v1/ai/chat
+    {
+      "message": "I want to fly from SF to Paris",
+      "current_slots": null,
+      "chat_id": null,
+      "slot_id": null
+    }
+    │
+    ▼
+Backend → AI Service: POST /chat
+    {
+      "message": "I want to fly from SF to Paris",
+      "current_slots": null
+    }
+    │
+    ▼
+AI Service:
+    1. Creates new Slots (auto-assigns slot_id)
+    2. Calls Gemini → parses message
+    3. Merges parsed slots
+    4. Checks missing fields
+    5. Returns ParseResponse (missing: ["dates", "pax", "budget"])
+    │
+    ▼
+Backend:
+    1. Creates Chat record (if minimum data available)
+    2. Saves user message to ChatMessage
+    3. Saves AI reply to ChatMessage
+    │
+    ▼
+Frontend: Receives ParseResponse
+    {
+      "current_slots": {...},
+      "missing": ["dates", "pax", "budget"],
+      "reply": "I need to know your travel dates...",
+      "chat_id": "...",
+      "slot_id": "..."
+    }
+```
+
+#### 2. Complete Information Flow (Plan Generation)
+
+```
+User: "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car"
+    │
+    ▼
+Frontend → Backend: POST /api/v1/ai/chat
+    {
+      "message": "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car",
+      "current_slots": { "slot_id": "...", ... },
+      "chat_id": "...",
+      "slot_id": "..."
+    }
+    │
+    ▼
+Backend → AI Service: POST /chat
+    {
+      "message": "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car",
+      "current_slots": { "slot_id": "...", ... }
+    }
+    │
+    ▼
+AI Service:
+    1. Calls Gemini → parses message
+    2. Merges parsed slots (preserves slot_id)
+    3. Checks missing fields → empty!
+    4. Generates plan_id (ULID)
+    5. Searches flights → finds cheapest
+    6. Searches hotels → finds cheapest
+    7. Searches attractions → finds top 3
+    8. Searches car → finds recommended
+    9. Returns TravelOptionsResponse
+    │
+    ▼
+Backend:
+    1. Updates Chat record (if needed)
+    2. Saves user message to ChatMessage
+    3. Saves AI reply to ChatMessage
+    4. Creates Plan record from TravelOptionsResponse
+    │
+    ▼
+Frontend: Receives TravelOptionsResponse
+    {
+      "plan_id": "...",
+      "slot_id": "...",
+      "flight": {...},
+      "hotel": {...},
+      "car": {...},
+      "attractions": [...],
+      "reply": "OK. I have updated your travel information.",
+      "chat_id": "..."
+    }
+```
+
+### Session Management
+
+**Slot ID Tracking**:
+- AI service generates `slot_id` (ULID) on first request
+- Backend stores `slot_id` in `Chat.slot_id` and `ChatMessage.slot_id`
+- Frontend sends `slot_id` in subsequent requests
+- AI service preserves `slot_id` across messages (merges slots)
+
+**Chat ID Tracking**:
+- Backend generates `chat_id` (UUID) when creating `Chat` record
+- Frontend sends `chat_id` in subsequent requests
+- Backend links `ChatMessage` and `Plan` records to `Chat`
+
+### AI Service Models
+
+#### Slots Model
+The main travel information container that tracks:
+- `slot_id`: Auto-generated ULID for session tracking
+- `origin_airport_code`: IATA code (e.g., "SFO")
+- `destination_airport_code`: IATA code (e.g., "CDG")
+- `destination_city_name`: Full name (e.g., "Paris")
+- `dates`: Start and end dates (ISO format)
+- `pax`: Adults and kids count
+- `budget`: Total budget in USD
+- `hotel`: Hotel preferences (request, amenities, rating)
+- `car`: Boolean for rental car need
+- `attractions`: List of attraction interests
+
+#### Response Types
+- **ParseResponse**: Returned when information is incomplete (asks for clarification)
+- **TravelOptionsResponse**: Returned when all information is complete (returns travel plan)
+
+### External API Integrations
+
+1. **Google Gemini API**
+   - Endpoint: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
+   - Purpose: Natural language parsing with JSON mode
+   - Authentication: API key (`GEMINI_API_KEY`)
+
+2. **Amadeus for Developers**
+   - Base URL: `https://test.api.amadeus.com` (test environment)
+   - Endpoints:
+     - `/v1/security/oauth2/token` - Get access token
+     - `/v2/shopping/flight-offers` - Search flights
+     - `/v3/shopping/hotel-offers` - Search hotels
+     - `/v1/shopping/activities` - Search attractions
+   - Authentication: OAuth2 client credentials (`AMADEUS_API_KEY`, `AMADEUS_API_SECRET`)
+
+3. **Mock Car Rental API**
+   - Currently uses JSON file for car recommendations
+   - Future: Integrate with Amadeus Car Rental API
 
 ## 📁 Project Structure
 
@@ -395,13 +611,13 @@ ai_travel_companion/
 │   │   ├── auth.py           # Authentication endpoints
 │   │   ├── users.py          # User management
 │   │   ├── chats.py          # Chat management
+│   │   ├── chat_messages.py  # Chat message endpoints
 │   │   ├── plans.py           # Plan management
 │   │   └── ai_integration.py  # AI service integration
 │   ├── core/                 # Core configuration
 │   │   ├── config.py         # Application settings
 │   │   ├── database.py       # Database configuration
-│   │   ├── security.py       # Authentication & security
-│   │   └── cache.py          # Redis cache operations
+│   │   └── security.py       # Authentication & security
 │   ├── models/               # SQLAlchemy models
 │   │   ├── user.py          # User model
 │   │   ├── chat.py          # Chat model
@@ -409,18 +625,11 @@ ai_travel_companion/
 │   │   └── chat_message.py  # Chat message model
 │   ├── repositories/         # Data access layer
 │   ├── services/            # Business logic layer
-│   ├── schemas/             # Pydantic schemas
 │   └── main.py             # FastAPI application entry point
 ├── frontend/                # React Native mobile app
 │   ├── src/
 │   │   ├── components/      # Reusable UI components
 │   │   ├── screens/         # App screens
-│   │   │   ├── SplashScreen.js
-│   │   │   ├── OnboardingScreen.js
-│   │   │   ├── ChatScreen.js
-│   │   │   ├── PlansScreen.js
-│   │   │   ├── MyChatsScreen.js
-│   │   │   └── SettingsScreen.js
 │   │   ├── hooks/           # Custom React hooks
 │   │   ├── stores/          # State management
 │   │   ├── lib/            # Utility functions
@@ -428,7 +637,9 @@ ai_travel_companion/
 │   ├── assets/             # Static assets
 │   └── package.json        # Frontend dependencies
 ├── ai/                     # AI service
-│   └── ai_npu.py          # Natural language processing
+│   ├── ai_npu.py          # Main AI service (FastAPI app)
+│   ├── api_services.py    # External API integrations
+│   └── base_models.py     # Pydantic models
 ├── postman/               # API testing collection
 ├── requirements.txt       # Python dependencies
 └── README.md             # This file
@@ -445,7 +656,13 @@ ai_travel_companion/
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-2. **Frontend Development**
+2. **AI Service Development**
+   ```bash
+   cd ai
+   python3 -m uvicorn ai_npu:app --reload --port 8001
+   ```
+
+3. **Frontend Development**
    ```bash
    cd frontend
    npm start
@@ -506,73 +723,36 @@ npm test
 Use the provided Postman collection in the `postman/` directory:
 
 1. Import `AI_Travel_Companion_Collection.json`
-2. Import `AI_Travel_Companion_Environment.json`
-3. Set up environment variables
-4. Run the collection
+2. Set up environment variables
+3. Run the collection
 
 ## 🚀 Deployment
 
 ### Using Docker (Recommended)
 
-1. **Create Dockerfile for Backend**
-   ```dockerfile
-   FROM python:3.9-slim
-   
-   WORKDIR /app
-   
-   COPY requirements.txt .
-   RUN pip install --no-cache-dir -r requirements.txt
-   
-   COPY backend/ .
-   
-   EXPOSE 8000
-   
-   CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-   ```
-
-2. **Create docker-compose.yml**
+1. **Create docker-compose.yml** (already included)
    ```yaml
    version: '3.8'
    
    services:
      db:
-       image: postgres:13
-       environment:
-         POSTGRES_DB: twos_db
-         POSTGRES_USER: postgres
-         POSTGRES_PASSWORD: postgres
-       ports:
-         - "5432:5432"
-       volumes:
-         - postgres_data:/var/lib/postgresql/data
-   
-     redis:
-       image: redis:7-alpine
-       ports:
-         - "6379:6379"
-       volumes:
-         - redis_data:/data
+       image: postgres:13-alpine
+       # ... database configuration
    
      backend:
-       build: .
-       ports:
-         - "8000:8000"
-       depends_on:
-         - db
-         - redis
-       environment:
-         DATABASE_URL: postgresql://postgres:postgres@db:5432/twos_db
-         REDIS_HOST: redis
-         REDIS_PORT: 6379
-       volumes:
-         - ./backend:/app
+       build:
+         context: .
+         dockerfile: Dockerfile
+       # ... backend configuration
    
-   volumes:
-     postgres_data:
-     redis_data:
+     ai_service:
+       build:
+         context: ./ai
+         dockerfile: Dockerfile.ai
+       # ... AI service configuration
    ```
 
-3. **Deploy**
+2. **Deploy**
    ```bash
    docker-compose up -d
    ```
@@ -589,7 +769,12 @@ Use the provided Postman collection in the `postman/` directory:
    gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
    ```
 
-3. **Deploy Frontend**
+3. **Deploy AI Service**
+   ```bash
+   gunicorn ai_npu:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8001
+   ```
+
+4. **Deploy Frontend**
    ```bash
    expo build:android
    expo build:ios
@@ -631,6 +816,9 @@ For support and questions:
 - Social features (chat/plan sharing)
 - Integration with more travel booking platforms
 - Multi-language support
+- Car rental API integration (replace mock)
+- Multiple travel option results (not just cheapest)
+- Budget optimization across components
 
 ---
 
