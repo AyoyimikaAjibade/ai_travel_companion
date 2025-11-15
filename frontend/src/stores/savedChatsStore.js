@@ -2,6 +2,14 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  createEmptyBookingLedger,
+  normalizeBookingLedger,
+  mergeBookingLedgers,
+  upsertBookingRecord,
+  cancelBookingRecords,
+  hasActiveBookings,
+} from "../utils/booking";
 
 const generateId = () =>
   `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -210,7 +218,7 @@ export const useSavedChatsStore = create(
           missing: [],
           ephemeral: !trimmedTitle,
           status: "draft",
-          booking: null,
+          booking: createEmptyBookingLedger(),
         };
         set((state) => ({
           chats: [chat, ...state.chats.filter((c) => !c.ephemeral)],
@@ -251,6 +259,18 @@ export const useSavedChatsStore = create(
               ? existing.title
               : defaultTitle(existing.createdAt || now);
 
+            const incomingBooking =
+              meta.booking !== undefined ? meta.booking : undefined;
+            const nextBooking =
+              incomingBooking !== undefined
+                ? mergeBookingLedgers(existing.booking, incomingBooking)
+                : normalizeBookingLedger(existing.booking);
+
+            let nextStatus = meta.status ?? existing.status ?? "draft";
+            if (meta.status === undefined) {
+              nextStatus = hasActiveBookings(nextBooking) ? "booked" : "draft";
+            }
+
             const updated = {
               ...existing,
               messages: sanitizedMessages,
@@ -270,11 +290,8 @@ export const useSavedChatsStore = create(
                 ? meta.missing
                 : existing.missing ?? [],
               ephemeral: !meaningful && !userRenamed,
-              status: meta.status ?? existing.status ?? "draft",
-              booking:
-                meta.booking !== undefined
-                  ? meta.booking
-                  : existing.booking ?? null,
+              status: nextStatus,
+              booking: nextBooking,
             };
 
             if (updated.status === "booked") {
@@ -297,6 +314,17 @@ export const useSavedChatsStore = create(
             ? meta.title.trim()
             : defaultTitle(now);
 
+          const incomingBooking = meta.booking;
+          const nextBooking =
+            incomingBooking !== undefined
+              ? mergeBookingLedgers(createEmptyBookingLedger(), incomingBooking)
+              : createEmptyBookingLedger();
+
+          let nextStatus = meta.status ?? "draft";
+          if (meta.status === undefined) {
+            nextStatus = hasActiveBookings(nextBooking) ? "booked" : "draft";
+          }
+
           const newChat = {
             id,
             title: nextTitle,
@@ -310,11 +338,11 @@ export const useSavedChatsStore = create(
             currentSlots: meta.currentSlots ?? null,
             missing: Array.isArray(meta.missing) ? meta.missing : [],
             ephemeral: !meaningful && !userRenamed,
-            status: meta.status ?? "draft",
-            booking: meta.booking ?? null,
+            status: nextStatus,
+            booking: nextBooking,
           };
 
-          if (newChat.status === "booked") {
+          if (nextStatus === "booked") {
             newChat.ephemeral = false;
           }
 
@@ -327,37 +355,96 @@ export const useSavedChatsStore = create(
 
       updateChatMetadata: (id, meta = {}) =>
         set((state) => ({
-          chats: state.chats.map((chat) =>
-            chat.id === id
-              ? {
-                  ...chat,
-                  ...meta,
-                  missing: Array.isArray(meta.missing)
-                    ? meta.missing
-                    : chat.missing,
-                  ephemeral:
-                    typeof meta.ephemeral === "boolean"
-                      ? meta.ephemeral
-                      : chat.ephemeral,
-                  status: meta.status ?? chat.status ?? "draft",
-                  booking:
-                    meta.booking !== undefined
-                      ? meta.booking
-                      : chat.booking ?? null,
-                }
-              : chat
-          ),
+          chats: state.chats.map((chat) => {
+            if (chat.id !== id) return chat;
+            const incomingBooking =
+              meta.booking !== undefined ? meta.booking : undefined;
+            const nextBooking =
+              incomingBooking !== undefined
+                ? mergeBookingLedgers(chat.booking, incomingBooking)
+                : normalizeBookingLedger(chat.booking);
+            let nextStatus = meta.status ?? chat.status ?? "draft";
+            if (meta.status === undefined) {
+              nextStatus = hasActiveBookings(nextBooking) ? "booked" : "draft";
+            }
+            return {
+              ...chat,
+              ...meta,
+              missing: Array.isArray(meta.missing)
+                ? meta.missing
+                : chat.missing,
+              ephemeral:
+                typeof meta.ephemeral === "boolean"
+                  ? meta.ephemeral
+                  : chat.ephemeral,
+              status: nextStatus,
+              booking: nextBooking,
+            };
+          }),
         })),
 
       markChatBooked: (id, booking = null) =>
+        set((state) => ({
+          chats: state.chats.map((chat) => {
+            if (chat.id !== id) return chat;
+            const nextBooking =
+              booking !== null && booking !== undefined
+                ? mergeBookingLedgers(chat.booking, booking)
+                : normalizeBookingLedger(chat.booking);
+            const hasBookings = hasActiveBookings(nextBooking);
+            return {
+              ...chat,
+              status: hasBookings ? "booked" : chat.status ?? "draft",
+              booking: nextBooking,
+              ephemeral: hasBookings ? false : chat.ephemeral,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        })),
+
+      addBookingRecord: (id, record) =>
+        set((state) => ({
+          chats: state.chats.map((chat) => {
+            if (chat.id !== id) return chat;
+            const currentLedger =
+              chat.booking ?? createEmptyBookingLedger();
+            const nextBooking = upsertBookingRecord(currentLedger, record);
+            const hasBookings = hasActiveBookings(nextBooking);
+            return {
+              ...chat,
+              booking: nextBooking,
+              status: hasBookings ? "booked" : chat.status ?? "draft",
+              ephemeral: hasBookings ? false : chat.ephemeral,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+          currentChatId: id,
+        })),
+
+      cancelServiceBookings: (id, serviceKeys = []) =>
+        set((state) => ({
+          chats: state.chats.map((chat) => {
+            if (chat.id !== id) return chat;
+            const nextBooking = cancelBookingRecords(chat.booking, serviceKeys);
+            const hasBookings = hasActiveBookings(nextBooking);
+            return {
+              ...chat,
+              booking: nextBooking,
+              status: hasBookings ? "booked" : "cancelled",
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+          currentChatId: id,
+        })),
+
+      clearBookings: (id) =>
         set((state) => ({
           chats: state.chats.map((chat) =>
             chat.id === id
               ? {
                   ...chat,
-                  status: "booked",
-                  booking,
-                  ephemeral: false,
+                  booking: createEmptyBookingLedger(),
+                  status: "draft",
                   updatedAt: new Date().toISOString(),
                 }
               : chat
@@ -397,7 +484,22 @@ export const useSavedChatsStore = create(
     {
       name: "saved-chats",
       storage: createJSONStorage(() => AsyncStorage),
-      version: 1,
+      version: 2,
+      migrate: (persistedState) => {
+        if (!persistedState || !Array.isArray(persistedState.chats)) {
+          return persistedState;
+        }
+        const chats = persistedState.chats.map((chat) => {
+          const normalized = normalizeBookingLedger(chat.booking);
+          const hasBookings = hasActiveBookings(normalized);
+          return {
+            ...chat,
+            booking: normalized,
+            status: chat.status ?? (hasBookings ? "booked" : "draft"),
+          };
+        });
+        return { ...persistedState, chats };
+      },
       partialize: (state) => ({
         chats: state.chats,
         currentChatId: state.currentChatId,

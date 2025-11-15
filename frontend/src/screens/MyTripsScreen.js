@@ -21,7 +21,30 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import { COLORS, SPACING, BORDER_RADIUS } from "../theme";
 import { useSavedChatsStore } from "../stores/savedChatsStore";
 import { formatCurrency } from "../utils/format";
+import {
+  normalizeBookingLedger,
+  getActiveBookings,
+} from "../utils/booking";
 
+const serviceTypeLabel = (type) => {
+  const normalized = (type || "").toLowerCase();
+  switch (normalized) {
+    case "flight":
+      return "Flight";
+    case "hotel":
+      return "Hotel";
+    case "car":
+    case "rental":
+      return "Car";
+    case "attraction":
+    case "experience":
+      return "Attraction";
+    case "combined":
+      return "Package";
+    default:
+      return "Booking";
+  }
+};
 const MyTripsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const chats = useSavedChatsStore((state) => state.chats);
@@ -111,10 +134,15 @@ const MyTripsScreen = ({ navigation }) => {
 
   const handleContinue = (chat) => {
     setActiveChat(chat.id);
-    if (chat.status === "booked" && chat.booking) {
+    const bookingLedger = normalizeBookingLedger(chat.booking);
+    const records = Object.values(bookingLedger.records || {});
+    if (records.length) {
+      const active = getActiveBookings(bookingLedger);
+      const firstRecord = active[0] ?? records[0];
       navigation.navigate("BookingConfirmation", {
         chatId: chat.id,
-        booking: chat.booking,
+        serviceKey: firstRecord?.serviceKey,
+        batchId: firstRecord?.batchId ?? undefined,
       });
     } else {
       navigation.navigate("Chat", { chatId: chat.id });
@@ -126,17 +154,52 @@ const MyTripsScreen = ({ navigation }) => {
     const updatedLabel = updatedAt
       ? formatDistanceToNow(new Date(updatedAt), { addSuffix: true })
       : "Recently";
-    const isBooked = item.status === "booked";
-    const bookingInfo = item.booking || {};
-    const confirmedLabel = bookingInfo.confirmedAt
-      ? formatDistanceToNow(new Date(bookingInfo.confirmedAt), {
+    const bookingLedger = normalizeBookingLedger(item.booking);
+    const allRecords = Object.values(bookingLedger.records || {});
+    const activeRecords = getActiveBookings(bookingLedger);
+    const firstActive = activeRecords[0] ?? allRecords[0] ?? null;
+    const totalAmount = activeRecords.reduce(
+      (sum, record) => sum + (Number(record.amount) || 0),
+      0
+    );
+    const amountLabel =
+      totalAmount > 0
+        ? formatCurrency(
+            totalAmount,
+            firstActive?.currency ?? activeRecords[0]?.currency ?? "USD"
+          )
+        : null;
+    const confirmedLabel = firstActive?.confirmedAt
+      ? formatDistanceToNow(new Date(firstActive.confirmedAt), {
           addSuffix: true,
         })
       : null;
-    const amountLabel =
-      bookingInfo.amount != null
-        ? formatCurrency(bookingInfo.amount, bookingInfo.currency ?? "USD")
-        : null;
+    const displayRecords = activeRecords.length ? activeRecords : allRecords;
+    const providers = Array.from(
+      new Set(
+        displayRecords
+          .map((record) => record.provider)
+          .filter((providerName) => typeof providerName === "string")
+      )
+    );
+    const servicesSummary = displayRecords
+      .map((record) => serviceTypeLabel(record.serviceType))
+      .filter(Boolean)
+      .join(" • ");
+    const summaryParts = [];
+    if (servicesSummary) summaryParts.push(servicesSummary);
+    if (providers.length) summaryParts.push(providers.join(" • "));
+    const bookingPreview = displayRecords.length
+      ? summaryParts.length
+        ? summaryParts.join(" • ")
+        : "Confirmed itinerary"
+      : item.preview?.length
+      ? item.preview
+      : "Continue the conversation to build this itinerary.";
+    const hasAnyBookings = allRecords.length > 0;
+    const isBooked = item.status === "booked" && activeRecords.length > 0;
+    const isCancelled =
+      item.status === "cancelled" && hasAnyBookings && !activeRecords.length;
 
     return (
       <View style={styles.tripCard}>
@@ -163,20 +226,18 @@ const MyTripsScreen = ({ navigation }) => {
         <Text style={styles.tripMeta}>
           {isBooked
             ? `Booked ${confirmedLabel ?? "recently"}`
+            : isCancelled
+            ? `Cancelled ${updatedLabel}`
             : `Updated ${updatedLabel}`}
         </Text>
 
         <Text style={styles.tripPreview}>
-          {isBooked
-            ? `${bookingInfo.provider ?? "Travel partner"} • ${
-                bookingInfo.type ?? "Booking"
-              }`
-            : item.preview?.length
+          {hasAnyBookings ? bookingPreview : item.preview?.length
             ? item.preview
             : "Continue the conversation to build this itinerary."}
         </Text>
 
-        {isBooked && amountLabel && (
+        {hasAnyBookings && amountLabel && (
           <Text style={styles.bookingAmount}>Total paid: {amountLabel}</Text>
         )}
 
@@ -187,7 +248,7 @@ const MyTripsScreen = ({ navigation }) => {
         >
           <MessageCircle size={18} color="#fff" />
           <Text style={styles.continueText}>
-            {isBooked ? "View booking" : "Continue chat"}
+            {hasAnyBookings ? "View bookings" : "Continue chat"}
           </Text>
         </TouchableOpacity>
       </View>

@@ -12,12 +12,19 @@ import { SPACING, COLORS, BORDER_RADIUS } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
+import PassengersForm, {
+  createPassenger,
+} from "../components/PassengersForm";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
-import { Alert } from "react-native";
+import { usePremiumAlert } from "../components/PremiumAlert";
 
 export default function GenericCheckout({ route, navigation }) {
   const { provider = "Provider", data = {}, currency = "USD" } =
     route.params || {};
+  const serviceType = route.params?.serviceType ?? route.params?.type ?? "item";
+  const serviceKey = route.params?.serviceKey;
+  const basePlanId = route.params?.basePlanId;
+  const chatId = route.params?.chatId;
   const items = Array.isArray(data.items) ? data.items : [];
   const { convertCurrency, targetCurrency } = useCurrencyConverter();
   const displayCurrency = targetCurrency || currency;
@@ -37,6 +44,61 @@ export default function GenericCheckout({ route, navigation }) {
   const taxes = subtotal * 0.1;
   const twosFee = subtotal * 0.05;
   const total = subtotal + taxes + twosFee;
+  const collectPassengers = ["attraction", "combined"].includes(
+    (serviceType || "").toLowerCase()
+  );
+  const maxPassengers = useMemo(() => {
+    if (!collectPassengers) return 1;
+    const candidates = [
+      data?.maxGuests,
+      data?.max_guests,
+      data?.capacity,
+      data?.maxOccupancy,
+    ];
+    for (const candidate of candidates) {
+      const parsed = parseInt(candidate, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    if (typeof data?.guestLimit === "number" && data.guestLimit > 0) {
+      return data.guestLimit;
+    }
+    if (typeof data?.guests === "string") {
+      const parsed = parseInt(data.guests, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 6;
+  }, [collectPassengers, data]);
+
+  const initialPassengers = useMemo(() => {
+    if (!collectPassengers) return [];
+    if (Array.isArray(data?.passengers) && data.passengers.length) {
+      return data.passengers.map((passenger) => {
+        const base = createPassenger();
+        return {
+          ...base,
+          ...passenger,
+          id: passenger.id ?? base.id,
+        };
+      });
+    }
+    return [createPassenger()];
+  }, [collectPassengers, data?.passengers]);
+
+  const [passengers, setPassengers] = useState(initialPassengers);
+  const passengersValid =
+    !collectPassengers ||
+    passengers.every(
+      (p) =>
+        typeof p?.firstName === "string" &&
+        p.firstName.trim().length > 0 &&
+        typeof p?.lastName === "string" &&
+        p.lastName.trim().length > 0
+    );
+  const [showPremiumAlert, premiumAlert] = usePremiumAlert();
   const [traveler, setTraveler] = useState({
     name: data.traveler ?? "",
     email: data.email ?? "",
@@ -49,25 +111,40 @@ export default function GenericCheckout({ route, navigation }) {
     traveler.email.trim().length > 0 &&
     traveler.phone.trim().length >= 6;
 
-  const handlePay = () =>
-    {
-      if (!travelerValid) {
-        Alert.alert(
-          "Traveler details",
-          "Please complete name, email, and contact number before continuing."
-        );
-        return;
-      }
+  const handlePay = () => {
+    if (!travelerValid) {
+      showPremiumAlert({
+        title: "Traveler details",
+        message:
+          "Please complete name, email, and contact number before continuing.",
+        variant: "warning",
+      });
+      return;
+    }
+    if (!passengersValid) {
+      showPremiumAlert({
+        title: "Guests",
+        message: "Please add the names for each guest before continuing.",
+        variant: "warning",
+      });
+      return;
+    }
 
     navigation.navigate("FakePayment", {
       provider,
       type: route.params?.type || "item",
+      serviceType,
+      serviceKey,
+      basePlanId,
+      chatId,
       data: {
         ...data,
         items,
         price: subtotal,
         currency: displayCurrency,
         traveler,
+        passengers: collectPassengers ? passengers : data.passengers,
+        maxPassengers,
       },
       summary: {
         total_price: total,
@@ -154,6 +231,34 @@ export default function GenericCheckout({ route, navigation }) {
           />
         </View>
 
+        {collectPassengers ? (
+          <>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Guests</Text>
+              {passengers.map((passenger, index) => (
+                <SummaryRow
+                  key={passenger.id ?? `guest-${index}`}
+                  label={`Guest ${index + 1}`}
+                  value={`${passenger.firstName ?? ""} ${
+                    passenger.lastName ?? ""
+                  }`.trim() || "—"}
+                />
+              ))}
+              <Text style={styles.sectionHint}>
+                {`Max guests: ${maxPassengers}`}
+              </Text>
+            </View>
+
+            <View style={{ marginHorizontal: SPACING.md, marginBottom: SPACING.md }}>
+              <PassengersForm
+                value={passengers}
+                onChange={setPassengers}
+                maxCount={maxPassengers}
+              />
+            </View>
+          </>
+        ) : null}
+
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Traveler information</Text>
           <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
@@ -164,6 +269,7 @@ export default function GenericCheckout({ route, navigation }) {
             Pay {formatCurrency(total, displayCurrency)} securely
           </Text>
         </TouchableOpacity>
+        {premiumAlert}
       </ScrollView>
     </SafeAreaView>
   );
@@ -269,6 +375,11 @@ const styles = StyleSheet.create({
     fontFamily: "Urbanist_600SemiBold",
     fontSize: 16,
     marginBottom: SPACING.sm,
+  },
+  sectionHint: {
+    marginTop: SPACING.xs,
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 12,
   },
   summaryRow: {
     flexDirection: "row",

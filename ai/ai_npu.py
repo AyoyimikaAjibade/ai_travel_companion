@@ -12,22 +12,17 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
-from api_services import (
-    call_gemini, 
-    amadeus_search_flights,
-    amadeus_search_hotels,
-    amadeus_search_attractions,
-    car_search_mock    )
-from base_models import (
-    ChatRequest,ParseResponse, ClarifyRequest, ClarifyResponse,
-    TravelOptionsResponse,FlightOption,HotelOption,
-    CarOption, AttractionOption, Slots, ChatResponse
-)
-import os
-import requests
-import ulid
-import json
-from datetime import datetime
+import json, ulid
+from datetime import datetime, timedelta
+
+from base_models import * 
+from services.nlp_service import call_gemini
+from services.flight_service import amadeus_search_flights
+from services.hotel_service import amadeus_search_hotels
+from services.attractions_service import amadeus_search_attractions
+from services.rental_car_service import car_search_mock, infer_car_types_by_pax
+from services.utils import merge_slots_preserve_id, pick_near_target
+from services.packages_service import build_three_budget_packages
 
 load_dotenv()
 
@@ -41,32 +36,6 @@ app = FastAPI (
 with open("car_list_mock.json") as f:
     CARS_DATA = json.load(f)
 
-# ------------------------------
-# Functions for endpoints
-# ------------------------------
-
-# Helper function to preserve slot ID
-def _strip_nones(x):
-    if isinstance(x, dict):
-        return {k: _strip_nones(v) for k, v in x.items() if v is not None}
-    if isinstance(x, list):
-        return [_strip_nones(v) for v in x]
-    return x
-
-def merge_slots_preserve_id(existing: Slots, incoming: Dict[str, Any]) -> Slots:
-    """
-    Merge LLM-parsed fields into existing Slots while preserving slot_id.
-    Rebuilds a *validated* Slots so nested models (Dates/Pax/HotelPreferences) are correct.
-    """
-    cleaned = _strip_nones(incoming or {})
-    cleaned.pop("slot_id", None)  # never accept client/LLM id
-
-    merged_dict = existing.model_dump()      # to plain dict
-    merged_dict.update(cleaned)              # apply updates
-    merged_dict["slot_id"] = existing.slot_id
-
-    # IMPORTANT: rebuild Slots to validate/construct submodels
-    return Slots.model_validate(merged_dict)
 
 # ------------------------------
 # Endponts
@@ -113,6 +82,7 @@ def chat(request: ChatRequest):
     slots_dict = result.get("current_slots", {})
     missing = result.get("missing", [])
     reply = result.get("reply", " ")
+    
     # Ensure reply is always a string, not a list
     if isinstance(reply, list):
         reply = " ".join(reply) if reply else " "
@@ -133,8 +103,8 @@ def chat(request: ChatRequest):
         created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        cheapest_flight : Optional[FlightOption] = None
-        cheapest_hotel : Optional[HotelOption] = None
+        flight : Optional[FlightOption] = None
+        hotel : Optional[HotelOption] = None
         car : Optional[CarOption] = None
         attractions_list : List[AttractionOption] = []
 
@@ -146,17 +116,27 @@ def chat(request: ChatRequest):
             new_current_slots.pax.adults is not None
         ])
         print(f"\n✅ CAN SEARCH FLIGHTS: {can_search_flights} ✅")
+        flight_total_price = 0
 
         if can_search_flights:
             print("🛩️ Searching for flights...")
             try:
                 flight_results = amadeus_search_flights(new_current_slots)
                 if flight_results:
-                    cheapest = min(flight_results,key=lambda x: x.get('price', float('inf')))
-                    cheapest_flight = FlightOption(**cheapest)
-                    print(f"\n✈️ Found cheapest flight: {cheapest_flight.airline} for ${cheapest_flight.price}")
+                    target_total = (new_current_slots.budget or 0) * 0.35
+                    pax_total = (new_current_slots.pax.adults or 0) + (new_current_slots.pax.kids or 0)
+                    per_person_target = (target_total / pax_total) if pax_total else target_total
+                    selected = pick_near_target(flight_results, 'price', per_person_target)
+                    if selected:
+                        total_price = selected.get('price', 0.0) * max(1, pax_total)
+                        selected_total = dict(selected)
+                        selected_total['price'] = total_price
+                        flight = FlightOption(**selected_total)
+                        flight_total_price = total_price
+                        print(f"\n✈️ Selected flight (total for {pax_total}): ${total_price:.2f} | Each: {selected.get('price', 0.0)} vs target ${target_total:.2f}")
             except Exception as e:
                 print("🔴 Flight search failed 🔴: ", repr(e))
+
 
         # --- Hotel Search ---
         can_search_hotels = all([
@@ -165,7 +145,8 @@ def chat(request: ChatRequest):
             new_current_slots.dates.start, new_current_slots.dates.end,
             new_current_slots.pax.adults is not None
         ])
-        
+        hotel_total_price = 0
+
         if can_search_hotels:
             print(f"\n✅ CAN SEARCH HOTELS: {can_search_hotels} ✅")
             print("🏨 Searching for hotels...")
@@ -173,17 +154,22 @@ def chat(request: ChatRequest):
             try:
                 hotel_results = amadeus_search_hotels(new_current_slots)
                 if hotel_results:
-                    cheapest = hotel_results[0]
-                    cheapest_hotel = HotelOption(**cheapest)
-                    print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and flat price is {cheapest_hotel.price_per_night}{cheapest_hotel.currency}\n")
+                    target_hotel_budget = (new_current_slots.budget or 0) * 0.30
+                    selected_hotel = pick_near_target(hotel_results, 'total_price', target_hotel_budget)
+                    if selected_hotel:
+                        hotel = HotelOption(**selected_hotel)
+                        hotel_total_price = hotel.total_price
+                        print(f"\n🏨 Selected hotel near ${target_hotel_budget:.2f}: {hotel.name} at ${hotel.total_price:.2f}\n")
             except Exception as e:
                 print("🔴 Hotel search failed 🔴: ", repr(e))
         else:
             print(f"\n✅ HOTEL SEARCH IS SKIPPED ✅")
+            
 
         # --- Attraction Search ---
         can_search_attractions = new_current_slots.destination_city_code is not None
         print(f"\n✅ CAN SEARCH ATTRACTIONS: {can_search_attractions} ✅")
+        attraction_total_price = 0
 
         if can_search_attractions:
             print("🎭 Searching for attractions...")
@@ -191,23 +177,60 @@ def chat(request: ChatRequest):
             if attraction_results:
                 attractions_list = [AttractionOption(**attr) for attr in attraction_results]
                 print(f"\n🎭 Found {len(attractions_list)} attractions.")
-
+    
+        # Calculate and normalize attraction prices
+        if attractions_list:
+            attraction_total_price = sum(attr.price for attr in attractions_list)
+            print(f"\nTotal Attraction price: ${attraction_total_price}\n")
+        else:
+            attraction_total_price = 0
+        
         # --- Car Search ---
-        can_search_car = new_current_slots.car is not None
-        print(f"✅ CAN SEARCH CAR: {can_search_car} ✅")
+        can_search_car = new_current_slots.car is True
+        print(f"\n✅ CAN SEARCH CAR: {can_search_car} ✅")
+        car_total_price = 0
 
         if can_search_car:
-            print("🚗 Searching for car...")
+            print("\n🚗 Searching for car...")
             car = car_search_mock(new_current_slots, CARS_DATA)
             if car:
-                print(f"🚗 Found {car} car.")
+                print(f"\n🚗 Found {car} car.")
+                # Calcuate days of using car based on the start and end information from slot  
+                start_date = datetime.strptime(new_current_slots.dates.start, "%Y-%m-%d").date()
+                end_date = datetime.strptime(new_current_slots.dates.end, "%Y-%m-%d").date()
+                car_days = (end_date - start_date).days
+                car_total_price = car.price_per_day * car_days
+                
+                print(f"\n🚗 Car rental for {car_days} days at {car.price_per_day}/day = ${car_total_price}\n")
+        else:
+            print("\n🚗Car Search is SKIPPED🚗")
+        
+        total_price = flight_total_price + hotel_total_price + car_total_price + attraction_total_price
+        print(f"\nThe total price for the travel plan is: ${total_price:.2f}\n")
+
+    
+        # Negative = under budget | Positive = over budget
+        price_different:float = total_price - (new_current_slots.budget or 0)
+
+        if price_different < 0.0: # Under budget
+            reply = f"Your trip total is under your budget!"
+            # reply = f"Your trip total is ${total_price:.2f} — that's under your ${new_current_slots.budget:.2f} budget."
+        elif price_different == 0.0:
+            reply = f"Your trip total is same as your budget!"
+            # reply = f"Your trip total is ${total_price:.2f} — that matches your ${new_current_slots.budget:.2f} budget."
+        elif 0.0 < price_different <= 200.00:   # Over budget less than $200
+            reply = f"Your trip total is just a bit over your budget!"
+            # reply = f"Looks like the total comes to ${total_price:.2f}, which is just a bit over your ${new_current_slots.budget:.2f} budget, but it will be awesome!"
+        elif 200.00 < price_different:      # Over budget more than $200
+            reply = f"Your trip total is quite a bit above your budget!"
+            # reply = f"Hmm, this trip totals ${total_price:.2f} — that's quite a bit above your ${new_current_slots.budget:.2f} budget."
 
         # Return TravelOptionsResponse with search results
         return TravelOptionsResponse(
             plan_id = plan_id,
             slot_id = new_current_slots.slot_id,
-            flight = cheapest_flight,
-            hotel = cheapest_hotel,
+            flight = flight,
+            hotel = hotel,
             car = car,
             attractions = attractions_list,
             created_time = created_time,
@@ -219,7 +242,24 @@ def chat(request: ChatRequest):
         print(f"❌ Missing information: {missing}")
         return ParseResponse(current_slots=new_current_slots, missing=missing, reply=reply)
 
-@app.post("/clarify", response_model=ClarifyResponse)
+# ------------------------------------------------------------------------
+# For Packages (Three Random Travel Plans)
+# Based on the budget: 
+#   1. Less than $2K
+#   2. $2K - $5K
+#   3. More than $5K 
+# ------------------------------------------------------------------------
+# Generate three random travel plans for budget tiers without explicit slots.
+@app.get("/packages")
+def get_budget_packages() -> Dict[str, Any]:
+    plans = build_three_budget_packages(CARS_DATA)
+    return {"by_tier": plans}
+
+"""
+@app.post("/preference/update")
+def preference_update(request: PreferenceUpdate): 
+
+@app.post("/clarify_for_dev", response_model=ClarifyResponse)
 def clarify(request: ClarifyRequest):
 
     #If there is no missing information
@@ -240,106 +280,4 @@ def clarify(request: ClarifyRequest):
     
     missing_info = request.missing[0]
     return ClarifyResponse(question=missing_info_map.get(missing_info, f"Could you provide {missing_info}?"))
-
-
-# This endpoint now finds the CHEAPEST options and returns a single plan
-@app.post("/search", response_model=TravelOptionsResponse)
-def search_options(slots:Slots):
-    """
-    Receives a complete set of slots and returns a single, optimized travel plan.
-    Currently optimized for the CHEAPEST options.
-    """
-
-    print("✅ Received slots for search: ", slots.model_dump_json(indent=2))
-
-    # Generate plan_id when the plan is generated
-    plan_id = ulid.new().str
-    created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    cheapest_flight : Optional[FlightOption] = None
-    cheapest_hotel : Optional[HotelOption] = None
-    car : Optional[CarOption] = None
-    attractions_list : List[AttractionOption] = []
-
-    # --- Flight Search ---
-    can_search_flights = all ([
-        slots.origin_airport_code,
-        slots.destination_airport_code,
-        slots.dates.start,
-        slots.pax.adults is not None
-    ])
-    print(f"✅ CAN SEARCH FLIGHTS: {can_search_flights} ✅")
-
-    if can_search_flights:
-        print("🛩️ Searching for flights...")
-        try:
-            flight_results = amadeus_search_flights(slots)
-            if flight_results:
-                cheapest = min(flight_results,key=lambda x: x.get('price', float('inf')))
-                cheapest_flight = FlightOption(**cheapest)
-                print(f"\n✈️ Found cheapest flight: {cheapest_flight.airline} for ${cheapest_flight.price}")
-        except Exception as e:
-            print("🔴 Flight search failed 🔴: ", repr(e))
-
-    # --- Hotel Search ---
-    can_search_hotels = all([
-        slots.hotel.request,    # if user didn't want a hotel, this will be false and hotel search will be skipped
-        slots.destination_city_code,    
-        slots.dates.start, slots.dates.end,
-        slots.pax.adults is not None
-    ])
-    
-    if can_search_hotels:
-        print(f"\n✅ CAN SEARCH HOTELS: {can_search_hotels} ✅")
-        print("🏨 Searching for hotels...")
-
-        try:
-            hotel_results = amadeus_search_hotels(slots)
-            if hotel_results:
-                cheapest = hotel_results[0]
-                #cheapest = min(hotel_results, key=lambda x: x.get('price_per_night', float('inf')))
-                cheapest_hotel = HotelOption(**cheapest)
-                # print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and total price is ${cheapest_hotel.total_price}\n")
-                print(f"\n🏨 Found cheapest hotel: {cheapest_hotel.name} and flat price is {cheapest_hotel.price_per_night}{cheapest_hotel.currency}\n")
-        except Exception as e:
-            print("🔴 Hotel search failed 🔴: ", repr(e))
-    else:
-        print(f"✅ HOTEL SEARCH IS SKIPPED ✅")
-
-    # --- Attraction Search ---
-    can_search_attractions = slots.destination_city_code is not None
-    print(f"✅ CAN SEARCH ATTRACTIONS: {can_search_attractions} ✅")
-
-    if can_search_attractions:
-        print("🎭 Searching for attractions...")
-        attraction_results = amadeus_search_attractions(slots)
-        if attraction_results:
-            attractions_list = [AttractionOption(**attr) for attr in attraction_results]
-            print(f"🎭 Found {len(attractions_list)} attractions.")
-
-
-    # --- Car Search ---
-    can_search_car = slots.car is not None
-    print(f"✅ CAN SEARCH CAR: {can_search_car} ✅")
-
-    if can_search_car:
-        print("🚗 Searching for car...")
-        car_result = car_search_mock(slots, CARS_DATA)
-        if car_result:
-            print(f"🚗 Found {car_result} car.")
-
-    return TravelOptionsResponse(
-        plan_id = plan_id,
-        slot_id = slots.slot_id,
-        flight = cheapest_flight,
-        hotel = cheapest_hotel,
-        car = car_result,
-        attractions = attractions_list,
-        created_time = created_time,
-        updated_time = updated_time
-    )
-"""
-@app.post("/preference/update")
-def preference_update(request: PreferenceUpdate): 
 """
