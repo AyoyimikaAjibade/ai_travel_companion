@@ -10,8 +10,7 @@ This module handles:
 """
 
 import logging
-import traceback
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
 
@@ -30,7 +29,6 @@ from dependencies import (
 from models.chat import ChatCreate
 from models.chat_message import ChatMessageCreate
 from models.user import User
-from models.plan import PlanCreate
 from services.chat_message_service import ChatMessageService
 from services.chat_service import ChatService
 from services.plan_service import PlanService
@@ -42,7 +40,7 @@ router = APIRouter()
 
 # AI Service base URL from config
 AI_SERVICE_BASE_URL = settings.AI_SERVICE_BASE_URL
-AI_SERVICE_TIMEOUT = 300000.0  # seconds TODO: Change to 30
+AI_SERVICE_TIMEOUT = 1200000.0  # seconds
 
 
 # ============================================================================
@@ -363,9 +361,21 @@ def _create_plan_from_ai_response(
         attractions = merged_components["attractions"]
         
         # Get dates for car price calculation
+        # Try to get dates from returned_slots (ParseResponse) or reconstruct from request
         dates = returned_slots.get("dates", {})
         start_date_str = dates.get("start")
         end_date_str = dates.get("end")
+        
+        # If dates not in returned_slots (TravelOptionsResponse), try to extract from flight data
+        if not start_date_str and ai_response.get("flight"):
+            flight_departure = ai_response.get("flight", {}).get("departure_time")
+            if flight_departure:
+                try:
+                    # Extract date from ISO datetime string
+                    dt = datetime.fromisoformat(flight_departure.replace('Z', '+00:00'))
+                    start_date_str = dt.strftime("%Y-%m-%d")
+                except Exception:
+                    pass
         
         # Calculate total price
         total_price = _calculate_plan_total_price(
@@ -421,10 +431,19 @@ async def _call_ai_service(message: str, current_slots: Optional[Dict[str, Any]]
         HTTPException: If AI service call fails
     """
     try:
+        # Prepare request payload (slot_id should be in current_slots if provided)
+        request_payload = {
+            "message": message,
+            "current_slots": current_slots
+        }
+        
+        logger.info(f"Calling AI service at {AI_SERVICE_BASE_URL}/chat")
+        logger.debug(f"Request payload: message='{message[:50]}...', current_slots keys={list(current_slots.keys()) if current_slots else None}")
+        
         async with httpx.AsyncClient(timeout=AI_SERVICE_TIMEOUT) as client:
             response = await client.post(
                 f"{AI_SERVICE_BASE_URL}/chat",
-                json={"message": message, "current_slots": current_slots},
+                json=request_payload,
             )
             response.raise_for_status()
             return response.json()
@@ -490,9 +509,8 @@ async def chat_with_ai(
     
     Request body:
     - message: str (required) - User's chat message
-    - current_slots: dict (optional) - Current slot values from previous interactions
+    - current_slots: dict (optional) - Current slot values from previous interactions (includes slot_id if available)
     - chat_id: UUID (optional) - Existing chat ID
-    - slot_id: str (optional) - AI service slot_id for session continuity
     
     Returns:
         AI service response with added chat_id and slot_id
@@ -506,7 +524,11 @@ async def chat_with_ai(
     
     current_slots = request_data.get("current_slots")
     chat_id = request_data.get("chat_id")
-    slot_id = request_data.get("slot_id") #TODO: Remove this?
+    
+    # Extract slot_id from current_slots if present (not from separate field)
+    slot_id = None
+    if current_slots and isinstance(current_slots, dict):
+        slot_id = current_slots.get("slot_id")
     
     # Parse chat_id if provided
     if chat_id:
@@ -522,13 +544,26 @@ async def chat_with_ai(
     except HTTPException:
         raise  # Re-raise HTTP exceptions from _call_ai_service
     
+    # Check if this is a TravelOptionsResponse (has plan_id) or ParseResponse (has missing)
+    is_complete_plan = "plan_id" in ai_response
+    is_parse_response = "missing" in ai_response
+    
     # Extract data from AI response
     returned_slots = ai_response.get("current_slots", {})
     missing_fields = ai_response.get("missing", [])
     
-    # Extract slot_id from response if not provided
-    if not slot_id and returned_slots.get("slot_id"):
-        slot_id = returned_slots.get("slot_id")
+    # Extract slot_id from response - can be in multiple places depending on response type
+    if not slot_id:
+        # For TravelOptionsResponse: slot_id is directly in the response
+        if ai_response.get("slot_id"):
+            slot_id = ai_response.get("slot_id")
+            logger.info(f"Extracted slot_id from TravelOptionsResponse: {slot_id}")
+        # For ParseResponse: slot_id is in current_slots
+        elif returned_slots and returned_slots.get("slot_id"):
+            slot_id = returned_slots.get("slot_id")
+            logger.info(f"Extracted slot_id from ParseResponse current_slots: {slot_id}")
+    
+    logger.info(f"Final slot_id: {slot_id}, is_complete_plan: {is_complete_plan}, is_parse_response: {is_parse_response}")
     
     # Get or create chat record
     chat = None
@@ -542,13 +577,48 @@ async def chat_with_ai(
     
     # Create chat if it doesn't exist and we have minimum required data
     if not chat:
+        # For TravelOptionsResponse: use original current_slots from request (it has all the data)
+        # For ParseResponse: use returned_slots from response
+        if is_complete_plan:
+            # TravelOptionsResponse doesn't include current_slots, so use original request data
+            slots_for_chat = current_slots if current_slots else {}
+            # Try to extract slot data from the response if available
+            if not slots_for_chat and slot_id:
+                # Create minimal slots structure with slot_id
+                slots_for_chat = {"slot_id": slot_id}
+        else:
+            # ParseResponse includes current_slots
+            slots_for_chat = returned_slots if returned_slots else {}
+        
+        # Ensure slot_id is in slots_for_chat if we have it
+        if slot_id and slots_for_chat and isinstance(slots_for_chat, dict):
+            slots_for_chat["slot_id"] = slot_id
+        
+        logger.info(f"Creating chat - is_complete_plan: {is_complete_plan}, slots_for_chat keys: {list(slots_for_chat.keys()) if slots_for_chat else None}")
+        
         chat_id = _create_chat_from_slots(
-            db, chat_service, current_user.id, returned_slots, slot_id
+            db, chat_service, current_user.id, slots_for_chat, slot_id
         )
+        
+        if chat_id:
+            logger.info(f"Created chat {chat_id} for user {current_user.id}")
+        else:
+            logger.warning(f"Could not create chat - insufficient data. slots_for_chat: {slots_for_chat}")
     
     # Persist messages if we have chat_id and slot_id
     final_chat_id = chat_id
-    final_slot_id = slot_id or returned_slots.get("slot_id")
+    # Get slot_id from multiple possible sources
+    final_slot_id = (
+        slot_id 
+        or ai_response.get("slot_id")  # From TravelOptionsResponse (direct field)
+        or (returned_slots.get("slot_id") if returned_slots else None)  # From ParseResponse (in current_slots)
+    )
+    
+    logger.info(f"Final chat_id: {final_chat_id}, final_slot_id: {final_slot_id}")
+    
+    # If we have a plan but no slot_id, log warning but still try to proceed
+    if is_complete_plan and not final_slot_id:
+        logger.warning("TravelOptionsResponse received but slot_id is missing - this should not happen")
     
     if final_chat_id and final_slot_id:
         _persist_chat_messages(
@@ -567,103 +637,3 @@ async def chat_with_ai(
     result["slot_id"] = final_slot_id
     
     return result
-
-
-@router.post("/chat/plan")
-def save_plan_from_chat(
-    request_data: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db),
-    chat_service: ChatService = Depends(get_chat_service),
-    plan_service: PlanService = Depends(get_plan_service),
-    current_user: User = Depends(get_current_active_user),
-) -> Dict[str, Any]:
-    """
-    Save a plan generated during chat or manually edited.
-    
-    This endpoint allows saving plans that were:
-    - Generated by AI but not automatically persisted
-    - Manually edited by the user
-    - Created outside the chat flow
-    
-    Request body:
-    - chat_id: UUID (required) - The chat this plan belongs to
-    - slot_id: str (optional) - AI service slot_id for tracking
-    - plan: dict (required) - Plan data including:
-        - total_price: float
-        - explanation: str (optional)
-        - flight_data: dict (optional)
-        - hotel_data: dict (optional)
-        - car_data: dict (optional)
-        - attractions_data: list (optional)
-        - deeplinks: dict (optional)
-        - ai_generated: bool (default: False)
-        - manual: bool (default: True)
-    
-    Returns:
-        Confirmation message with saved plan details
-    """
-    chat_id_val = request_data.get("chat_id")
-    slot_id = request_data.get("slot_id", "")
-    plan_payload = request_data.get("plan") or {}
-    
-    if not chat_id_val:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="chat_id is required"
-        )
-    
-    if not plan_payload:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="plan data is required"
-        )
-    
-    # Validate chat_id format
-    try:
-        chat_id_uuid = UUID(str(chat_id_val))
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid chat_id format"
-        )
-    
-    # Verify chat ownership
-    chat = chat_service.get_by_id(db, chat_id_uuid)
-    if not chat or chat.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
-        )
-    
-    # Calculate score if missing
-    if plan_payload.get("score") is None:
-        try:
-            plan_payload["score"] = plan_service.calculate_plan_score(plan_payload)
-        except Exception as e:
-            logger.warning(f"Could not calculate plan score: {e}")
-            plan_payload["score"] = None
-    
-    # Ensure required fields have defaults
-    plan_payload.setdefault("total_price", 0.0)
-    plan_payload.setdefault("ai_generated", False)
-    plan_payload.setdefault("manual", True)
-    plan_payload.setdefault("deeplinks", {})
-    
-    # Persist plan
-    try:
-        saved_plan = plan_service.confirm_plan(db, chat_id_uuid, slot_id, plan_payload)
-        logger.info(f"Saved plan {saved_plan.id} for chat {chat_id_uuid}")
-        
-        return {
-            "message": "Plan saved successfully",
-            "plan": {
-                "id": str(saved_plan.id),
-                "total_price": saved_plan.total_price,
-                "score": saved_plan.score,
-                "ai_generated": saved_plan.ai_generated,
-                "manual": saved_plan.manual,
-            },
-        }
-    
-    except Exception as e:
-        logger.error(f"Error saving plan: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save plan: {str(e)}",
-        )

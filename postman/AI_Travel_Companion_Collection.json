@@ -560,7 +560,7 @@
       "name": "🤖 AI Integration",
       "item": [
         {
-          "name": "Chat",
+          "name": "Chat - New Conversation",
           "event": [
             {
               "listen": "test",
@@ -579,8 +579,16 @@
                   "    if (responseData.slot_id) {",
                   "        pm.environment.set('slot_id', responseData.slot_id);",
                   "    }",
-                  "    console.log('Chat ID:', responseData.chat_id, 'Slot ID:', responseData.slot_id);",
+                  "    if (responseData.current_slots && responseData.current_slots.slot_id) {",
+                  "        pm.environment.set('slot_id', responseData.current_slots.slot_id);",
+                  "    }",
+                  "    console.log('Chat ID:', responseData.chat_id, 'Slot ID:', responseData.slot_id || responseData.current_slots?.slot_id);",
                   "    console.log('AI response keys:', Object.keys(responseData));",
+                  "    if (responseData.plan_id) {",
+                  "        console.log('✅ Plan generated! Plan ID:', responseData.plan_id);",
+                  "    } else if (responseData.missing && responseData.missing.length > 0) {",
+                  "        console.log('⚠️ Missing fields:', responseData.missing);",
+                  "    }",
                   "}"
                 ]
               }
@@ -596,33 +604,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from November 10 to November 20 for 2 adults\",\n  \"current_slots\": null,\n  \"chat_id\": null,\n  \"slot_id\": null\n}"
+              "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from November 12 to November 21 for 2 adults and 2 kids. I need a rental car during the trip. I don't need a hotel. My budget is $5k\",\n  \"current_slots\": null,\n  \"chat_id\": null\n}"
             },
             "url": {
               "raw": "{{full_url}}/ai/chat",
               "host": ["{{full_url}}"],
               "path": ["ai", "chat"]
-            }
-          }
-        },
-        {
-          "name": "Save Plan from Chat",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"chat_id\": \"{{chat_id}}\",\n  \"slot_id\": \"{{slot_id}}\",\n  \"plan\": {\n    \"total_price\": 1500.00,\n    \"explanation\": \"A manually created plan for testing.\",\n    \"flight_data\": {\n      \"airline\": \"Manual Air\",\n      \"price\": 300.00\n    },\n    \"hotel_data\": {\n      \"name\": \"Manual Stay\",\n      \"total_price\": 1000.00\n    },\n    \"ai_generated\": false,\n    \"manual\": true\n  }\n}"
-            },
-            "url": {
-              "raw": "{{full_url}}/ai/chat/plan",
-              "host": ["{{full_url}}"],
-              "path": ["ai", "chat", "plan"]
             }
           }
         }

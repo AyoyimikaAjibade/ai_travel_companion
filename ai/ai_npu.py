@@ -225,10 +225,18 @@ def chat(request: ChatRequest):
             reply = f"Your trip total is quite a bit above your budget!"
             # reply = f"Hmm, this trip totals ${total_price:.2f} — that's quite a bit above your ${new_current_slots.budget:.2f} budget."
 
+        # Ensure slot_id is set (should always be set by validator, but double-check)
+        final_slot_id = new_current_slots.slot_id
+        if not final_slot_id:
+            print(f"⚠️ WARNING: slot_id is None, this should not happen. new_current_slots: {new_current_slots}")
+            # Fallback: generate a new one
+            final_slot_id = ulid.new().str
+            print(f"⚠️ Generated new slot_id: {final_slot_id}")
+        
         # Return TravelOptionsResponse with search results
         return TravelOptionsResponse(
             plan_id = plan_id,
-            slot_id = new_current_slots.slot_id,
+            slot_id = final_slot_id,
             flight = flight,
             hotel = hotel,
             car = car,

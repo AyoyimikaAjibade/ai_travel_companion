@@ -26,9 +26,9 @@ RUN pip install --no-cache-dir \
 
 # Copy AI service source code
 COPY ai_npu.py .
-COPY api_services.py .
 COPY base_models.py .
-COPY requirements.txt .
+COPY car_list_mock.json .
+COPY services/ ./services/
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash ai_user \
