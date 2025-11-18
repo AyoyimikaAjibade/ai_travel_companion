@@ -17,6 +17,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import GradientBackground from "../components/GradientBackground";
 import { login, getCurrentUser, requestPasswordReset } from "../lib/api";
 import { useSessionStore } from "../stores/sessionStore";
@@ -127,9 +128,11 @@ export default function LoginScreen({ navigation }) {
   }, [resetResponse]);
 
   return (
-    <GradientBackground colors={GRADIENTS.indigo} style={styles.bg}>
+    <GradientBackground colors={GRADIENTS.primary} style={styles.bg}>
       <SafeAreaView style={styles.safe}>
-        {/* Back */}
+        <View style={styles.glowOne} />
+        <View style={styles.glowTwo} />
+
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[styles.backBtn, { top: insets.top || 12 }]}
@@ -142,80 +145,134 @@ export default function LoginScreen({ navigation }) {
           style={styles.container}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.header}>
-            <Image
-              source={require("../../assets/logo.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>
-              Sign in to continue planning trips.
-            </Text>
+          <View style={styles.heroSection}>
+            <LinearGradient
+              colors={["rgba(15,23,42,0.85)", "rgba(67,56,202,0.65)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
+              <View style={styles.logoRow}>
+                <Image
+                  source={require("../../assets/icon.png")}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+                <View style={styles.logoTextWrap}>
+                  <Text style={styles.brandName}>TWOS</Text>
+                  <Text style={styles.brandSub}>Travel Operating System</Text>
+                </View>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>v2.4</Text>
+                </View>
+              </View>
+
+              <Text style={styles.heroTitle}>Return to mission control</Text>
+              <Text style={styles.heroSubtitle}>
+                Your AI concierge kept every itinerary on standby.
+              </Text>
+
+              <View style={styles.heroMetaRow}>
+                <View style={styles.metaBlock}>
+                  <Text style={styles.metaValue}>140+</Text>
+                  <Text style={styles.metaLabel}>
+                    smart drafts synced today
+                  </Text>
+                </View>
+                <View style={styles.metaDivider} />
+                <View style={styles.metaBlock}>
+                  <Text style={styles.metaValue}>Live</Text>
+                  <Text style={styles.metaLabel}>concierge status</Text>
+                </View>
+              </View>
+            </LinearGradient>
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.inputRow}>
-              <User size={18} color="rgba(255,255,255,0.7)" />
-              <TextInput
-                placeholder="Username"
-                placeholderTextColor="rgba(255,255,255,0.55)"
-                value={username}
-                onChangeText={setUsername}
-                style={styles.input}
-                autoCapitalize="none"
-                returnKeyType="next"
-              />
+          <View style={styles.formCard}>
+            <Text style={styles.formEyebrow}>Sign back in</Text>
+            <Text style={styles.formTitle}>Unlock your personal co-pilot</Text>
+            <Text style={styles.formSubtitle}>
+              Secure workspace access with enterprise-grade auth.
+            </Text>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Username</Text>
+              <View style={styles.inputRow}>
+                <User size={18} color="rgba(255,255,255,0.7)" />
+                <TextInput
+                  placeholder="alex.mercer"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  value={username}
+                  onChangeText={setUsername}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  returnKeyType="next"
+                />
+              </View>
             </View>
 
-            <View style={styles.inputRow}>
-              <Lock size={18} color="rgba(255,255,255,0.7)" />
-              <TextInput
-                placeholder="Password"
-                placeholderTextColor="rgba(255,255,255,0.55)"
-                value={password}
-                onChangeText={setPassword}
-                style={styles.input}
-                secureTextEntry
-                returnKeyType="done"
-              />
+            <View style={styles.field}>
+              <View style={styles.fieldHeader}>
+                <Text style={styles.fieldLabel}>Password</Text>
+                <TouchableOpacity onPress={openReset} activeOpacity={0.85}>
+                  <Text style={styles.inlineAction}>forgot?</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.inputRow}>
+                <Lock size={18} color="rgba(255,255,255,0.7)" />
+                <TextInput
+                  placeholder="••••••••"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  value={password}
+                  onChangeText={setPassword}
+                  style={styles.input}
+                  secureTextEntry
+                  returnKeyType="done"
+                />
+              </View>
             </View>
 
             <TouchableOpacity
-              style={styles.forgot}
-              onPress={openReset}
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionBtn}
+              style={styles.primaryBtn}
               onPress={handleLogin}
               activeOpacity={0.9}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <View style={styles.actionInner}>
-                  <Text style={styles.actionText}>Sign in</Text>
-                  <ArrowRight size={18} color="#fff" />
-                </View>
-              )}
+              <LinearGradient
+                colors={["#22d3ee", "#7c3aed"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.primaryBtnGradient}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <View style={styles.primaryBtnInner}>
+                    <Text style={styles.actionText}>Enter cockpit</Text>
+                    <View style={styles.primaryBtnIcon}>
+                      <ArrowRight size={18} color="#fff" />
+                    </View>
+                  </View>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
 
-            <View style={styles.altRow}>
-              <Text style={styles.altText}>No account yet?</Text>
-              <TouchableOpacity onPress={() => navigation.replace("Signup")}>
-                <Text style={styles.altLink}> Create one</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => navigation.replace("Signup")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryText}>
+                Need an account? Launch one
+              </Text>
+            </TouchableOpacity>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Fast, private, demo-only sign in.
-            </Text>
+            <View style={styles.trustRow}>
+              <View style={styles.trustDot} />
+              <Text style={styles.trustCopy}>
+                Traveler data stays encrypted end-to-end.
+              </Text>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -323,91 +380,234 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   bg: { flex: 1 },
   safe: { flex: 1 },
+  glowOne: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    borderRadius: 260 / 2,
+    backgroundColor: "rgba(14,165,233,0.32)",
+    top: -40,
+    right: -80,
+    opacity: 0.82,
+  },
+  glowTwo: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 200 / 2,
+    backgroundColor: "rgba(15,118,110,0.35)",
+    bottom: 80,
+    left: -60,
+    opacity: 0.7,
+  },
   backBtn: {
     position: "absolute",
     left: 12,
     zIndex: 30,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    padding: 8,
-    borderRadius: 10,
+    backgroundColor: "rgba(6,182,212,0.15)",
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   container: {
     flex: 1,
     padding: SPACING.lg,
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
   },
-  header: { alignItems: "center", marginTop: -SPACING.xl },
-  logo: { width: 200, height: 200, marginBottom: -SPACING.md },
-  title: {
-    color: "#fff",
-    fontSize: 26,
-    fontFamily: "Urbanist_700Bold",
+  heroSection: {
+    marginBottom: SPACING.lg,
   },
-  subtitle: {
-    color: "rgba(255,255,255,0.9)",
-    marginTop: SPACING.xs,
-    fontSize: 14,
-  },
-
-  card: {
-    marginTop: -SPACING.xxl * 2.5,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: BORDER_RADIUS.lg,
+  heroCard: {
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.2)",
     shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  logoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: SPACING.md,
+  },
+  logo: { width: 56, height: 56, marginRight: SPACING.sm },
+  logoTextWrap: { flex: 1 },
+  brandName: {
+    color: "#fff",
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 18,
+    letterSpacing: 1,
+  },
+  brandSub: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  badge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(14,165,233,0.32)",
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontFamily: "Urbanist_600SemiBold",
+    letterSpacing: 0.5,
+  },
+  heroTitle: {
+    color: "#fff",
+    fontSize: 28,
+    fontFamily: "Urbanist_700Bold",
+    marginBottom: SPACING.xs,
+  },
+  heroSubtitle: {
+    color: "rgba(226,232,240,0.9)",
+    fontSize: 14,
+    marginBottom: SPACING.md,
+  },
+  heroMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: SPACING.sm,
+    backgroundColor: "rgba(15,23,42,0.5)",
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  metaBlock: { flex: 1 },
+  metaValue: {
+    color: "#fff",
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 18,
+  },
+  metaLabel: {
+    color: "rgba(226,232,240,0.8)",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  metaDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginHorizontal: SPACING.sm,
+  },
+  formCard: {
+    backgroundColor: "rgba(6,11,25,0.85)",
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.2)",
+    shadowColor: "#020617",
+    shadowOpacity: 0.7,
+    shadowRadius: 30,
+    elevation: 14,
+  },
+  formEyebrow: {
+    color: COLORS.secondary,
+    fontSize: 13,
+    letterSpacing: 1.6,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  formTitle: {
+    color: "#fff",
+    fontFamily: "Urbanist_700Bold",
+    fontSize: 24,
+  },
+  formSubtitle: {
+    color: "rgba(148,163,184,0.9)",
+    marginTop: 4,
+    marginBottom: SPACING.lg,
+    lineHeight: 20,
+  },
+  field: {
+    marginBottom: SPACING.md,
+  },
+  fieldHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  fieldLabel: {
+    color: "rgba(255,255,255,0.75)",
+    marginBottom: SPACING.xs / 2,
+    fontSize: 13,
+    fontFamily: "Urbanist_600SemiBold",
+  },
+  inlineAction: {
+    color: "#38bdf8",
+    fontSize: 13,
+    fontFamily: "Urbanist_600SemiBold",
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.02)",
-    borderRadius: 12,
+    backgroundColor: "rgba(15,23,42,0.9)",
+    borderRadius: BORDER_RADIUS.lg,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
-    marginBottom: SPACING.sm,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   input: {
+    flex: 1,
     marginLeft: SPACING.sm,
     color: "#fff",
-    flex: 1,
     fontSize: 15,
+    fontFamily: "Urbanist_500Medium",
   },
-
-  forgot: { alignItems: "flex-end", marginTop: SPACING.xs },
-  forgotText: { color: "rgba(255,255,255,0.6)", fontSize: 13 },
-
-  actionBtn: {
-    marginTop: SPACING.md,
-    paddingVertical: 14,
-    borderRadius: 12,
+  primaryBtn: {
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: "hidden",
+    marginTop: SPACING.sm,
+  },
+  primaryBtnGradient: {
+    paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "#0b84ff",
-    shadowColor: "#0b84ff",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 4,
   },
-  actionInner: { flexDirection: "row", alignItems: "center", gap: 8 },
+  primaryBtnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  primaryBtnIcon: {
+    marginLeft: SPACING.sm,
+  },
   actionText: {
     color: "#fff",
     fontSize: 16,
     fontFamily: "Urbanist_600SemiBold",
   },
-  altRow: {
+  secondaryBtn: {
+    marginTop: SPACING.md,
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    backgroundColor: "rgba(15,23,42,0.4)",
+  },
+  secondaryText: {
+    color: "#e0f2fe",
+    fontSize: 14,
+  },
+  trustRow: {
     flexDirection: "row",
-    justifyContent: "center",
+    alignItems: "center",
     marginTop: SPACING.md,
   },
-  altText: { color: "rgba(255,255,255,0.7)" },
-  altLink: { color: "#fff", fontFamily: "Urbanist_600SemiBold" },
-
-  footer: { alignItems: "center", paddingBottom: SPACING.lg },
-  footerText: {
-    color: "rgba(255,255,255,0.45)",
+  trustDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#22c55e",
+    marginRight: SPACING.sm,
+  },
+  trustCopy: {
+    color: "rgba(148,163,184,0.9)",
+    flex: 1,
     fontSize: 12,
-    textAlign: "center",
   },
   modalOverlay: {
     flex: 1,

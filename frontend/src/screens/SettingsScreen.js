@@ -253,6 +253,20 @@ const SettingsScreen = ({ navigation }) => {
           what you want and it finds options.
         </Text>
         <Text style={styles.version}>Version 1.0.0</Text>
+
+        <TouchableOpacity
+          style={[styles.actionRow, { marginTop: SPACING.md }]}
+          onPress={() => navigation.navigate("Terms")}
+          activeOpacity={0.85}
+        >
+          <View style={styles.actionInfo}>
+            <Text style={styles.actionTitle}>Terms & Conditions</Text>
+            <Text style={styles.actionDesc}>
+              Understand how we handle data and responsibilities
+            </Text>
+          </View>
+          <ChevronRight size={18} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );

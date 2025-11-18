@@ -23,6 +23,7 @@ import PackagesScreen from "./src/screens/PackagesScreen";
 import PackageDetailsScreen from "./src/screens/PackageDetailsScreen";
 import MyTripsScreen from "./src/screens/MyTripsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import TermsScreen from "./src/screens/TermsScreen";
 // 👉 Your custom splash screen component
 import AppSplashScreen from "./src/screens/SplashScreen";
 import ProviderPreview from "./src/screens/ProviderPreview";
@@ -145,6 +146,11 @@ export default function App() {
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen
+            name="Terms"
+            component={TermsScreen}
+            options={{ headerShown: false }}
+          />
           <Stack.Screen
             name="BookingConfirmation"
             component={BookingConfirmationScreen}
