@@ -92,7 +92,7 @@ class PreferenceUpdate(BaseModel):
 
 class FlightOption(BaseModel):
     airline: str
-    price: float
+    price_per_person: float
     currency: str
     departure_time: str
     arrival_time: str 

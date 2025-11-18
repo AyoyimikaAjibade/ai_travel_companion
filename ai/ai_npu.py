@@ -108,6 +108,8 @@ def chat(request: ChatRequest):
         car : Optional[CarOption] = None
         attractions_list : List[AttractionOption] = []
 
+        # print(f"\nCurrent_Slots: {new_current_slots}\n")
+
         # --- Flight Search ---
         can_search_flights = all ([
             new_current_slots.origin_airport_code,
@@ -126,14 +128,15 @@ def chat(request: ChatRequest):
                     target_total = (new_current_slots.budget or 0) * 0.35
                     pax_total = (new_current_slots.pax.adults or 0) + (new_current_slots.pax.kids or 0)
                     per_person_target = (target_total / pax_total) if pax_total else target_total
-                    selected = pick_near_target(flight_results, 'price', per_person_target)
-                    if selected:
-                        total_price = selected.get('price', 0.0) * max(1, pax_total)
-                        selected_total = dict(selected)
+                    selected_flight = pick_near_target(flight_results, 'price', per_person_target)
+                    if selected_flight:
+                        total_price = selected_flight.get('price_per_person', 0.0) * max(1, pax_total)
+                        selected_total = dict(selected_flight)
                         selected_total['price'] = total_price
                         flight = FlightOption(**selected_total)
                         flight_total_price = total_price
-                        print(f"\n✈️ Selected flight (total for {pax_total}): ${total_price:.2f} | Each: {selected.get('price', 0.0)} vs target ${target_total:.2f}")
+                        print(selected_flight)
+                        print(f"\n✈️ Selected flight (total for {pax_total}): ${total_price:.2f} | Each: {selected_flight.get('price_per_person', 0.0)}")
             except Exception as e:
                 print("🔴 Flight search failed 🔴: ", repr(e))
 
@@ -159,6 +162,7 @@ def chat(request: ChatRequest):
                     if selected_hotel:
                         hotel = HotelOption(**selected_hotel)
                         hotel_total_price = hotel.total_price
+                        print(hotel)
                         print(f"\n🏨 Selected hotel near ${target_hotel_budget:.2f}: {hotel.name} at ${hotel.total_price:.2f}\n")
             except Exception as e:
                 print("🔴 Hotel search failed 🔴: ", repr(e))
@@ -191,7 +195,7 @@ def chat(request: ChatRequest):
         car_total_price = 0
 
         if can_search_car:
-            print("\n🚗 Searching for car...")
+            print("🚗 Searching for car...")
             car = car_search_mock(new_current_slots, CARS_DATA)
             if car:
                 print(f"\n🚗 Found {car} car.")
@@ -200,7 +204,7 @@ def chat(request: ChatRequest):
                 end_date = datetime.strptime(new_current_slots.dates.end, "%Y-%m-%d").date()
                 car_days = (end_date - start_date).days
                 car_total_price = car.price_per_day * car_days
-                
+                print(car)
                 print(f"\n🚗 Car rental for {car_days} days at {car.price_per_day}/day = ${car_total_price}\n")
         else:
             print("\n🚗Car Search is SKIPPED🚗")
@@ -232,7 +236,7 @@ def chat(request: ChatRequest):
             # Fallback: generate a new one
             final_slot_id = ulid.new().str
             print(f"⚠️ Generated new slot_id: {final_slot_id}")
-        
+
         # Return TravelOptionsResponse with search results
         return TravelOptionsResponse(
             plan_id = plan_id,

@@ -1,7 +1,12 @@
 import os
-from dotenv import load_dotenv
+from pathlib import Path
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv()
+# Try current working dir first; if not found, load the one next to ai_npu.py (project root)
+loaded = load_dotenv(find_dotenv())
+if not loaded:
+    project_root = Path(__file__).resolve().parents[1]  # .../ai/
+    load_dotenv(project_root / ".env")
 
 # API Keys
 GEMINI_KEY   = os.getenv("GEMINI_API_KEY")

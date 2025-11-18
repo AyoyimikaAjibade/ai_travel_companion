@@ -46,7 +46,7 @@ def amadeus_search_flights(slots: Slots) -> List[Dict[str, Any]]:
             usd = convert_currency_to_usd(raw_total, raw_cur)
             parsed.append({
                 "airline": first_seg.get('carrierCode', 'N/A'),
-                "price": usd,
+                "price_per_person": usd,
                 "currency": 'USD',
                 "departure_time": first_seg.get('departure', {}).get('at', 'N/A'),
                 "arrival_time": it.get('segments', [{}])[-1].get('arrival', {}).get('at', 'N/A'),

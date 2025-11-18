@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 import random
 import ulid
@@ -18,6 +18,13 @@ from .hotel_service import amadeus_search_hotels
 from .attractions_service import amadeus_search_attractions
 from .rental_car_service import car_search_mock
 from .utils import pick_near_target
+
+MAX_PLAN_ATTEMPTS = 3
+TIER_PRICE_LIMITS = {
+    "under_2000": 2000.0,
+    "between_2000_5000": 5000.0,
+    "above_5000": None,
+}
 
 # ------------------------------------------------------------------------
 # Build example slots for three budget tiers
@@ -80,19 +87,19 @@ def _build_slots_for_budget(tier: str) -> Slots:
     # heuristic budgets + prefs
     if tier == "under_2000":
         budget_value = random.randint(1200, 1800)
-        hotel_rating = 3
+        hotel_rating = 2
         wants_car = False
-        amenities = ["wifi"]
+        amenities = []
     elif tier == "between_2000_5000":
         budget_value = random.randint(2200, 4800)
-        hotel_rating = 4
+        hotel_rating = 3
         wants_car = random.choice([False, True])
-        amenities = ["wifi", "breakfast"]
+        amenities = ["breakfast"]
     else:
         budget_value = random.randint(5200, 9000)
-        hotel_rating = 5
+        hotel_rating = 4
         wants_car = random.choice([False, True])
-        amenities = ["wifi", "breakfast", "gym", "pool"]
+        amenities = ["breakfast", "pool"]
 
     start_date = today + timedelta(days=depart_offset)
     end_date = start_date + timedelta(days=nights)
@@ -112,18 +119,23 @@ def _build_slots_for_budget(tier: str) -> Slots:
 
 
 # ------------------------------------------------------------------------
-# Build a full plan (flight/hotel/car/attractions) from Slots
+# Run individual searches and calcualte total price
 # ------------------------------------------------------------------------
-def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOptionsResponse:
-    plan_id = ulid.new().str
-    created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    updated_time = created_time
-
+def _search_plan_components(
+    slots: Slots, cars_data: Dict[str, Any]
+) -> Tuple[
+    Optional[FlightOption],
+    Optional[HotelOption],
+    Optional[CarOption],
+    List[AttractionOption],
+    float,
+]:
     flight_opt: Optional[FlightOption] = None
     hotel_opt: Optional[HotelOption] = None
     car_opt: Optional[CarOption] = None
     attractions_opts: List[AttractionOption] = []
 
+    print(f"\n{slots}\n")
     # Flights
     try:
         flights = amadeus_search_flights(slots)
@@ -140,7 +152,7 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
     except Exception as e:
         print("packages: flight search error", repr(e))
 
-    print(f"\nPACKAGES: The selected option: {flight_opt}\n")
+    print(f"\nPACKAGES: The selected FLIGHT option: {flight_opt}\n")
 
     # Hotels
     try:
@@ -153,7 +165,7 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
     except Exception as e:
         print("packages: hotel search error", repr(e))
 
-    print(f"PACKAGES: The selected option: {hotel_opt}\n")
+    print(f"PACKAGES: The selected HOTEL option: {hotel_opt}\n")
 
     # Attractions
     try:
@@ -162,8 +174,8 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
             attractions_opts = [AttractionOption(**a) for a in attrs]
     except Exception as e:
         print("packages: attractions search error", repr(e))
-    
-    print(f"\nPACKAGES: The selected option: {attractions_opts}\n")
+
+    print(f"\nPACKAGES: The selected ATTR option: {attractions_opts}\n")
 
     # Car
     try:
@@ -171,10 +183,10 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
             car_opt = car_search_mock(slots, cars_data)
     except Exception as e:
         print("packages: car search error", repr(e))
-    
-    print(f"\nPACKAGES: The selected option: {car_opt}\n")
 
-    # Price tally
+    print(f"\nPACKAGES: The selected CAR option: {car_opt}\n")
+
+    # Total Price
     total_price = 0.0
     if flight_opt:
         total_price += getattr(flight_opt, "price", 0.0)
@@ -186,6 +198,7 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
             end_date = getattr(slots.dates, "end", None)
             if start_date and end_date:
                 from datetime import datetime as dt
+
                 nights = (dt.strptime(end_date, "%Y-%m-%d") - dt.strptime(start_date, "%Y-%m-%d")).days
                 car_days = max(1, nights)
             else:
@@ -196,15 +209,54 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
     if attractions_opts:
         total_price += sum([getattr(a, "price", 0.0) for a in attractions_opts])
 
-    # Reply vs budget
-    budget = slots.budget or 0.0
-    reply = ""
-    if total_price > 0 and budget > 0:
-        gap = total_price - budget
-        if gap > 0:
-            reply = f"Total estimated trip cost is ${total_price:.2f}, which is ${gap:.2f} over your budget of ${budget:.0f}."
-        else:
-            reply = f"Total estimated trip cost is ${total_price:.2f}, which is ${-gap:.2f} under your budget of ${budget:.0f}."
+    return flight_opt, hotel_opt, car_opt, attractions_opts, total_price
+
+
+def _is_total_price_within_tier(tier: Optional[str], total_price: float) -> bool:
+    limit = TIER_PRICE_LIMITS.get(tier)
+    if limit is None:
+        return True
+    if total_price <= 0:
+        return True
+    return total_price <= limit
+
+
+# ------------------------------------------------------------------------
+# Build a full plan (flight/hotel/car/attractions) from Slots
+# ------------------------------------------------------------------------
+def _build_plan_from_slots(
+    slots: Slots, cars_data: Dict[str, Any], tier: Optional[str] = None) -> TravelOptionsResponse:
+    plan_id = ulid.new().str
+    created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated_time = created_time
+
+    limit = TIER_PRICE_LIMITS.get(tier)
+    max_attempts = MAX_PLAN_ATTEMPTS if limit else 1
+
+    flight_opt: Optional[FlightOption] = None
+    hotel_opt: Optional[HotelOption] = None
+    car_opt: Optional[CarOption] = None
+    attractions_opts: List[AttractionOption] = []
+    total_price = 0.0
+
+    for attempt in range(1, max_attempts + 1):
+        (
+            flight_opt,
+            hotel_opt,
+            car_opt,
+            attractions_opts,
+            total_price,
+        ) = _search_plan_components(slots, cars_data)
+
+        if _is_total_price_within_tier(tier, total_price):
+            break
+
+        if attempt < max_attempts:
+            print(
+                f"PACKAGES: Total ${total_price:.2f} exceeds tier '{tier}' limit ${limit:.0f}; re-running searches (attempt {attempt + 1})."
+            )
+
+    reply = f"Total estimated trip cost is ${total_price:.2f}."
 
     return TravelOptionsResponse(
         plan_id=plan_id,
@@ -218,16 +270,11 @@ def _build_plan_from_slots(slots: Slots, cars_data: Dict[str, Any]) -> TravelOpt
         reply=reply,
     )
 
-
-# ------------------------------------------------------------------------
-# Public: build 3 packages by tier in one call
-#   returns: {"under_2000": TravelOptionsResponse, ...}
-# ------------------------------------------------------------------------
 def build_three_budget_packages(cars_data: Dict[str, Any]) -> Dict[str, TravelOptionsResponse]:
     tiers = ["under_2000", "between_2000_5000", "above_5000"]
     plans: Dict[str, TravelOptionsResponse] = {}
     for tier in tiers:
         slots = _build_slots_for_budget(tier)
-        plan = _build_plan_from_slots(slots, cars_data)
+        plan = _build_plan_from_slots(slots, cars_data, tier)
         plans[tier] = plan
     return plans
