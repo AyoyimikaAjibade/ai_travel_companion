@@ -19,7 +19,6 @@ import * as ExpoSplash from "expo-splash-screen";
 // Screens
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import ChatScreen from "./src/screens/ChatScreen";
-import PackagesScreen from "./src/screens/PackagesScreen";
 import PackageDetailsScreen from "./src/screens/PackageDetailsScreen";
 import MyTripsScreen from "./src/screens/MyTripsScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
@@ -37,7 +36,7 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
 
 // Icons
-import { MessageCircle, Package, Luggage, Settings } from "lucide-react-native";
+import { MessageCircle, Luggage, Settings } from "lucide-react-native";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -51,7 +50,6 @@ function TabNavigator() {
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
           let IconComponent = MessageCircle;
-          if (route.name === "Packages") IconComponent = Package;
           if (route.name === "MyTrips") IconComponent = Luggage;
           if (route.name === "Settings") IconComponent = Settings;
           return <IconComponent size={size} color={color} />;
@@ -70,7 +68,6 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen name="Chat" component={ChatScreen} />
-      <Tab.Screen name="Packages" component={PackagesScreen} />
       <Tab.Screen name="MyTrips" component={MyTripsScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
