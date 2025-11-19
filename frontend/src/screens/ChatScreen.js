@@ -13,7 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Send, Plus } from "lucide-react-native";
+import { Send, Plus, Keyboard as KeyboardIcon } from "lucide-react-native";
 import MessageBubble from "../components/MessageBubble";
 import TagChip from "../components/TagChip";
 import EmptyState from "../components/EmptyState";
@@ -151,6 +151,7 @@ class ChatScreenClass extends React.Component {
       missing: [],
       chatStatus: "draft",
       booking: null,
+      isKeyboardVisible: false,
     };
     this.flatListRef = React.createRef();
     this._localFillAttempts = 0;
@@ -158,6 +159,8 @@ class ChatScreenClass extends React.Component {
     this.isApplyingChat = false;
     this.unsubscribeFocus = null;
     this.unsubscribeStore = null;
+    this.keyboardShowListener = null;
+    this.keyboardHideListener = null;
     this.handleStoreChange = this.handleStoreChange.bind(this);
   }
 
@@ -170,6 +173,10 @@ class ChatScreenClass extends React.Component {
       );
     }
     this.unsubscribeStore = useSavedChatsStore.subscribe(this.handleStoreChange);
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    this.keyboardShowListener = Keyboard.addListener(showEvent, this.handleKeyboardShow);
+    this.keyboardHideListener = Keyboard.addListener(hideEvent, this.handleKeyboardHide);
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -206,7 +213,25 @@ class ChatScreenClass extends React.Component {
     if (typeof this.unsubscribeStore === "function") {
       this.unsubscribeStore();
     }
+    this.keyboardShowListener?.remove();
+    this.keyboardHideListener?.remove();
   }
+
+  handleKeyboardShow = () => {
+    if (!this.state.isKeyboardVisible) {
+      this.setState({ isKeyboardVisible: true });
+    }
+  };
+
+  handleKeyboardHide = () => {
+    if (this.state.isKeyboardVisible) {
+      this.setState({ isKeyboardVisible: false });
+    }
+  };
+
+  dismissKeyboard = () => {
+    Keyboard.dismiss();
+  };
 
   handleStoreChange(state) {
     if (!this.currentChatId) return;
@@ -637,7 +662,7 @@ class ChatScreenClass extends React.Component {
   };
 
   render() {
-    const { messages, message, isTyping } = this.state;
+    const { messages, message, isTyping, isKeyboardVisible } = this.state;
 
     return (
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -708,6 +733,16 @@ class ChatScreenClass extends React.Component {
                   multiline
                   maxLength={500}
                 />
+                {isKeyboardVisible && (
+                  <TouchableOpacity
+                    onPress={this.dismissKeyboard}
+                    style={styles.keyboardDismissButton}
+                    accessibilityLabel="Hide keyboard"
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <KeyboardIcon size={18} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   onPress={this.handleSend}
                   style={[
@@ -844,6 +879,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: 20,
     padding: SPACING.sm,
+  },
+  keyboardDismissButton: {
+    marginLeft: SPACING.sm,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 20,
+    padding: SPACING.xs,
   },
   sendButtonDisabled: { opacity: 0.5 },
 
