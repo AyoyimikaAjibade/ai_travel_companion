@@ -9,6 +9,8 @@ import {
   Keyboard,
   InteractionManager,
   Text,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Send, Plus } from "lucide-react-native";
@@ -639,84 +641,90 @@ class ChatScreenClass extends React.Component {
 
     return (
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={styles.container}>
-          <View style={styles.headerBar}>
-            <Text style={styles.headerTitle}>Plan a trip</Text>
-            <TouchableOpacity
-              style={styles.newChatBtn}
-              onPress={this.handleNewChat}
-              activeOpacity={0.88}
-            >
-              <Plus size={18} color="#fff" />
-              <Text style={styles.newChatText}>New chat</Text>
-            </TouchableOpacity>
-          </View>
-
-          {messages.length === 0 ? (
-            <View style={styles.emptyWrap}>
-              <EmptyState
-                title="Tell me your vibe"
-                description="Try: 'SF → Doha, Nov 10–15, under $1500, pool + breakfast'"
-              />
-            </View>
-          ) : (
-            <FlatList
-              ref={this.flatListRef}
-              data={messages}
-              renderItem={this.renderMessage}
-              keyExtractor={(item) => item.id || this.generateId()}
-              extraData={{ booking: this.state.booking, status: this.state.chatStatus }}
-              style={styles.messagesList}
-              contentContainerStyle={styles.messagesContainer}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator
-              onContentSizeChange={() => this.scrollToEndSmooth()}
-            />
-          )}
-
-          {/* Suggestion chips for first missing slot */}
-          {this.renderSuggestionArea()}
-
-          {/* Footer */}
-          <SafeAreaView edges={["bottom"]} style={styles.footerSafe}>
-            {/* <View style={styles.quickChips}>
-              {QUICK_CHIPS.map((chip, index) => (
-                <TagChip
-                  key={index}
-                  text={chip}
-                  onPress={() => this.handleQuickChip(chip)}
-                />
-              ))}
-            </View> */}
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={[styles.input, isTyping && styles.inputDisabled]}
-                value={message}
-                onChangeText={(text) => this.setState({ message: text })}
-                placeholder="Message TWOS..."
-                placeholderTextColor={COLORS.textMuted}
-                onSubmitEditing={this.handleSend}
-                editable={!isTyping}
-                multiline
-                maxLength={500}
-              />
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoider}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
+        >
+          <View style={styles.container}>
+            <View style={styles.headerBar}>
+              <Text style={styles.headerTitle}>Plan a trip</Text>
               <TouchableOpacity
-                onPress={this.handleSend}
-                style={[
-                  styles.sendButton,
-                  isTyping && styles.sendButtonDisabled,
-                ]}
-                disabled={isTyping}
+                style={styles.newChatBtn}
+                onPress={this.handleNewChat}
+                activeOpacity={0.88}
               >
-                <Send
-                  size={24}
-                  color={isTyping ? COLORS.textMuted : COLORS.primary}
-                />
+                <Plus size={18} color="#fff" />
+                <Text style={styles.newChatText}>New chat</Text>
               </TouchableOpacity>
             </View>
-          </SafeAreaView>
-        </View>
+
+            {messages.length === 0 ? (
+              <View style={styles.emptyWrap}>
+                <EmptyState
+                  title="Tell me your vibe"
+                  description="Try: 'SF → Doha, Nov 10–15, under $1500, pool + breakfast'"
+                />
+              </View>
+            ) : (
+              <FlatList
+                ref={this.flatListRef}
+                data={messages}
+                renderItem={this.renderMessage}
+                keyExtractor={(item) => item.id || this.generateId()}
+                extraData={{ booking: this.state.booking, status: this.state.chatStatus }}
+                style={styles.messagesList}
+                contentContainerStyle={styles.messagesContainer}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+                onContentSizeChange={() => this.scrollToEndSmooth()}
+              />
+            )}
+
+            {/* Suggestion chips for first missing slot */}
+            {this.renderSuggestionArea()}
+
+            {/* Footer */}
+            <SafeAreaView edges={["bottom"]} style={styles.footerSafe}>
+              {/* <View style={styles.quickChips}>
+                {QUICK_CHIPS.map((chip, index) => (
+                  <TagChip
+                    key={index}
+                    text={chip}
+                    onPress={() => this.handleQuickChip(chip)}
+                  />
+                ))}
+              </View> */}
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[styles.input, isTyping && styles.inputDisabled]}
+                  value={message}
+                  onChangeText={(text) => this.setState({ message: text })}
+                  placeholder="Message TWOS..."
+                  placeholderTextColor={COLORS.textMuted}
+                  onSubmitEditing={this.handleSend}
+                  editable={!isTyping}
+                  multiline
+                  maxLength={500}
+                />
+                <TouchableOpacity
+                  onPress={this.handleSend}
+                  style={[
+                    styles.sendButton,
+                    isTyping && styles.sendButtonDisabled,
+                  ]}
+                  disabled={isTyping}
+                >
+                  <Send
+                    size={24}
+                    color={isTyping ? COLORS.textMuted : COLORS.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -725,6 +733,7 @@ class ChatScreenClass extends React.Component {
 /* ===== styles ===== */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
+  keyboardAvoider: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.background },
   headerBar: {
     flexDirection: "row",
