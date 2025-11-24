@@ -12,6 +12,7 @@ import {
   Alert,
   Image,
   Modal,
+  ScrollView,
 } from "react-native";
 import {
   SafeAreaView,
@@ -145,135 +146,141 @@ export default function LoginScreen({ navigation }) {
           style={styles.container}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.heroSection}>
-            <LinearGradient
-              colors={["rgba(15,23,42,0.85)", "rgba(67,56,202,0.65)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroCard}
-            >
-              <View style={styles.logoRow}>
-                <Image
-                  source={require("../../assets/icon.png")}
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
-                <View style={styles.logoTextWrap}>
-                  <Text style={styles.brandName}>TWOS</Text>
-                  <Text style={styles.brandSub}>Travel Operating System</Text>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>v2.4</Text>
-                </View>
-              </View>
-
-              <Text style={styles.heroTitle}>Return to mission control</Text>
-              <Text style={styles.heroSubtitle}>
-                Your AI concierge kept every itinerary on standby.
-              </Text>
-
-              <View style={styles.heroMetaRow}>
-                <View style={styles.metaBlock}>
-                  <Text style={styles.metaValue}>140+</Text>
-                  <Text style={styles.metaLabel}>
-                    smart drafts synced today
-                  </Text>
-                </View>
-                <View style={styles.metaDivider} />
-                <View style={styles.metaBlock}>
-                  <Text style={styles.metaValue}>Live</Text>
-                  <Text style={styles.metaLabel}>concierge status</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          <View style={styles.formCard}>
-            <Text style={styles.formEyebrow}>Sign back in</Text>
-            <Text style={styles.formTitle}>Unlock your personal co-pilot</Text>
-            <Text style={styles.formSubtitle}>
-              Secure workspace access with enterprise-grade auth.
-            </Text>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Username</Text>
-              <View style={styles.inputRow}>
-                <User size={18} color="rgba(255,255,255,0.7)" />
-                <TextInput
-                  placeholder="alex.mercer"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={username}
-                  onChangeText={setUsername}
-                  style={styles.input}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                />
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <View style={styles.fieldHeader}>
-                <Text style={styles.fieldLabel}>Password</Text>
-                <TouchableOpacity onPress={openReset} activeOpacity={0.85}>
-                  <Text style={styles.inlineAction}>forgot?</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.inputRow}>
-                <Lock size={18} color="rgba(255,255,255,0.7)" />
-                <TextInput
-                  placeholder="••••••••"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={password}
-                  onChangeText={setPassword}
-                  style={styles.input}
-                  secureTextEntry
-                  returnKeyType="done"
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={handleLogin}
-              activeOpacity={0.9}
-              disabled={loading}
-            >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.heroSection}>
               <LinearGradient
-                colors={["#22d3ee", "#7c3aed"]}
+                colors={["rgba(15,23,42,0.85)", "rgba(67,56,202,0.65)"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.primaryBtnGradient}
+                style={styles.heroCard}
               >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <View style={styles.primaryBtnInner}>
-                    <Text style={styles.actionText}>Enter cockpit</Text>
-                    <View style={styles.primaryBtnIcon}>
-                      <ArrowRight size={18} color="#fff" />
-                    </View>
+                <View style={styles.logoRow}>
+                  <Image
+                    source={require("../../assets/icon.png")}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                  <View style={styles.logoTextWrap}>
+                    <Text style={styles.brandName}>TWOS</Text>
+                    <Text style={styles.brandSub}>Travel Operating System</Text>
                   </View>
-                )}
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>v2.4</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.heroTitle}>Return to mission control</Text>
+                <Text style={styles.heroSubtitle}>
+                  Your AI concierge kept every itinerary on standby.
+                </Text>
+
+                <View style={styles.heroMetaRow}>
+                  <View style={styles.metaBlock}>
+                    <Text style={styles.metaValue}>140+</Text>
+                    <Text style={styles.metaLabel}>
+                      smart drafts synced today
+                    </Text>
+                  </View>
+                  <View style={styles.metaDivider} />
+                  <View style={styles.metaBlock}>
+                    <Text style={styles.metaValue}>Live</Text>
+                    <Text style={styles.metaLabel}>concierge status</Text>
+                  </View>
+                </View>
               </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => navigation.replace("Signup")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.secondaryText}>
-                Need an account? Launch one
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.trustRow}>
-              <View style={styles.trustDot} />
-              <Text style={styles.trustCopy}>
-                Traveler data stays encrypted end-to-end.
-              </Text>
             </View>
-          </View>
+
+            <View style={styles.formCard}>
+              <Text style={styles.formEyebrow}>Sign back in</Text>
+              <Text style={styles.formTitle}>Unlock your personal co-pilot</Text>
+              <Text style={styles.formSubtitle}>
+                Secure workspace access with enterprise-grade auth.
+              </Text>
+
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Username</Text>
+                <View style={styles.inputRow}>
+                  <User size={18} color="rgba(255,255,255,0.7)" />
+                  <TextInput
+                    placeholder="alex.mercer"
+                    placeholderTextColor="rgba(255,255,255,0.45)"
+                    value={username}
+                    onChangeText={setUsername}
+                    style={styles.input}
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <View style={styles.fieldHeader}>
+                  <Text style={styles.fieldLabel}>Password</Text>
+                  <TouchableOpacity onPress={openReset} activeOpacity={0.85}>
+                    <Text style={styles.inlineAction}>forgot?</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.inputRow}>
+                  <Lock size={18} color="rgba(255,255,255,0.7)" />
+                  <TextInput
+                    placeholder="••••••••"
+                    placeholderTextColor="rgba(255,255,255,0.45)"
+                    value={password}
+                    onChangeText={setPassword}
+                    style={styles.input}
+                    secureTextEntry
+                    returnKeyType="done"
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={handleLogin}
+                activeOpacity={0.9}
+                disabled={loading}
+              >
+                <LinearGradient
+                  colors={["#22d3ee", "#7c3aed"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.primaryBtnGradient}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <View style={styles.primaryBtnInner}>
+                      <Text style={styles.actionText}>Enter cockpit</Text>
+                      <View style={styles.primaryBtnIcon}>
+                        <ArrowRight size={18} color="#fff" />
+                      </View>
+                    </View>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => navigation.replace("Signup")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.secondaryText}>
+                  Need an account? Launch one
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.trustRow}>
+                <View style={styles.trustDot} />
+                <Text style={styles.trustCopy}>
+                  Traveler data stays encrypted end-to-end.
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
       <Modal
@@ -412,6 +419,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: SPACING.lg,
     justifyContent: "flex-end",
   },

@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
   Image,
+  ScrollView,
 } from "react-native";
 import {
   SafeAreaView,
@@ -76,133 +77,139 @@ export default function SignupScreen({ navigation }) {
           style={styles.container}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <LinearGradient
-            colors={["rgba(15,118,110,0.8)", "rgba(12,74,110,0.65)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroCard}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <View style={styles.logoRow}>
-              <Image
-                source={require("../../assets/icon.png")}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-              <View style={styles.logoCopy}>
-                <Text style={styles.brandName}>TWOS</Text>
-                <Text style={styles.brandSub}>AI Travel Companion</Text>
-              </View>
-            </View>
-
-            <Text style={styles.heroTitle}>Claim your cockpit seat</Text>
-            <Text style={styles.heroSubtitle}>
-              Design cinematic trips, sync with teams, and co-build with your AI
-              concierge.
-            </Text>
-
-            <View style={styles.heroChips}>
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>Realtime pricing radar</Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>Shared mission logs</Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>Priority concierge access</Text>
-              </View>
-            </View>
-          </LinearGradient>
-
-          <View style={styles.formCard}>
-            <Text style={styles.formEyebrow}>Create profile</Text>
-            <Text style={styles.formTitle}>
-              We just need the essentials to launch you.
-            </Text>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Username</Text>
-              <View style={styles.inputRow}>
-                <UserPlus size={18} color="rgba(255,255,255,0.8)" />
-                <TextInput
-                  placeholder="captain.rivera"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={username}
-                  onChangeText={setUsername}
-                  style={styles.input}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                  underlineColorAndroid="transparent"
-                />
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Email</Text>
-              <View style={styles.inputRow}>
-                <Mail size={18} color="rgba(255,255,255,0.8)" />
-                <TextInput
-                  placeholder="you@orbit.studio"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={email}
-                  onChangeText={setEmail}
-                  style={styles.input}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                  underlineColorAndroid="transparent"
-                />
-              </View>
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Password</Text>
-              <View style={styles.inputRow}>
-                <Lock size={18} color="rgba(255,255,255,0.8)" />
-                <TextInput
-                  placeholder="Use 6+ characters"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={password}
-                  onChangeText={setPassword}
-                  style={styles.input}
-                  secureTextEntry
-                  returnKeyType="done"
-                  underlineColorAndroid="transparent"
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={handleSignup}
-              activeOpacity={0.9}
-              disabled={loading}
+            <LinearGradient
+              colors={["rgba(15,118,110,0.8)", "rgba(12,74,110,0.65)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
             >
-              <LinearGradient
-                colors={["#06b6d4", "#8b5cf6"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryBtnGradient}
+              <View style={styles.logoRow}>
+                <Image
+                  source={require("../../assets/icon.png")}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+                <View style={styles.logoCopy}>
+                  <Text style={styles.brandName}>TWOS</Text>
+                  <Text style={styles.brandSub}>AI Travel Companion</Text>
+                </View>
+              </View>
+
+              <Text style={styles.heroTitle}>Claim your cockpit seat</Text>
+              <Text style={styles.heroSubtitle}>
+                Design cinematic trips, sync with teams, and co-build with your
+                AI concierge.
+              </Text>
+
+              <View style={styles.heroChips}>
+                <View style={styles.chip}>
+                  <Text style={styles.chipText}>Realtime pricing radar</Text>
+                </View>
+                <View style={styles.chip}>
+                  <Text style={styles.chipText}>Shared mission logs</Text>
+                </View>
+                <View style={styles.chip}>
+                  <Text style={styles.chipText}>Priority concierge access</Text>
+                </View>
+              </View>
+            </LinearGradient>
+
+            <View style={styles.formCard}>
+              <Text style={styles.formEyebrow}>Create profile</Text>
+              <Text style={styles.formTitle}>
+                We just need the essentials to launch you.
+              </Text>
+
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Username</Text>
+                <View style={styles.inputRow}>
+                  <UserPlus size={18} color="rgba(255,255,255,0.8)" />
+                  <TextInput
+                    placeholder="captain.rivera"
+                    placeholderTextColor="rgba(255,255,255,0.45)"
+                    value={username}
+                    onChangeText={setUsername}
+                    style={styles.input}
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                    underlineColorAndroid="transparent"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Email</Text>
+                <View style={styles.inputRow}>
+                  <Mail size={18} color="rgba(255,255,255,0.8)" />
+                  <TextInput
+                    placeholder="you@orbit.studio"
+                    placeholderTextColor="rgba(255,255,255,0.45)"
+                    value={email}
+                    onChangeText={setEmail}
+                    style={styles.input}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                    underlineColorAndroid="transparent"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Password</Text>
+                <View style={styles.inputRow}>
+                  <Lock size={18} color="rgba(255,255,255,0.8)" />
+                  <TextInput
+                    placeholder="Use 6+ characters"
+                    placeholderTextColor="rgba(255,255,255,0.45)"
+                    value={password}
+                    onChangeText={setPassword}
+                    style={styles.input}
+                    secureTextEntry
+                    returnKeyType="done"
+                    underlineColorAndroid="transparent"
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={handleSignup}
+                activeOpacity={0.9}
+                disabled={loading}
               >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.btnText}>Activate account</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <View style={styles.altRow}>
-              <Text style={styles.altText}>Already mission-ready?</Text>
-              <TouchableOpacity onPress={() => navigation.replace("Login")}>
-                <Text style={styles.altLink}> Sign in</Text>
+                <LinearGradient
+                  colors={["#06b6d4", "#8b5cf6"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.primaryBtnGradient}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.btnText}>Activate account</Text>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
-            </View>
 
-            <Text style={styles.disclaimer}>
-              By creating an account you agree to the TWOS terms and the promise
-              to keep exploring.
-            </Text>
-          </View>
+              <View style={styles.altRow}>
+                <Text style={styles.altText}>Already mission-ready?</Text>
+                <TouchableOpacity onPress={() => navigation.replace("Login")}>
+                  <Text style={styles.altLink}> Sign in</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.disclaimer}>
+                By creating an account you agree to the TWOS terms and the
+                promise to keep exploring.
+              </Text>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </GradientBackground>
@@ -244,6 +251,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: SPACING.lg,
     justifyContent: "flex-end",
   },
