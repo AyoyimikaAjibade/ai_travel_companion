@@ -15,11 +15,12 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from core.security import get_current_active_user
+from core.security import get_current_active_user, get_current_user_optional
+from core.database import SessionLocal
 from dependencies import (
     get_chat_message_service,
     get_chat_service,
@@ -40,7 +41,7 @@ router = APIRouter()
 
 # AI Service base URL from config
 AI_SERVICE_BASE_URL = settings.AI_SERVICE_BASE_URL
-AI_SERVICE_TIMEOUT = 1200000.0  # seconds
+AI_SERVICE_TIMEOUT = 300.0  # 5 minutes - reasonable timeout for AI service calls
 
 
 # ============================================================================
@@ -131,10 +132,78 @@ def _calculate_plan_total_price(
     return round(total, 2)
 
 
+def _extract_chat_fields_from_slots(slots: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extract individual chat fields from current_slots dictionary.
+    
+    Args:
+        slots: Current slots dictionary from AI service
+    
+    Returns:
+        Dictionary with individual chat fields
+    """
+    if not slots:
+        return {}
+    
+    dates = slots.get("dates", {})
+    pax = slots.get("pax", {})
+    hotel = slots.get("hotel", {})
+    
+    chat_fields = {}
+    
+    # Extract all available fields
+    if slots.get("slot_id"):
+        chat_fields["slot_id"] = slots.get("slot_id")
+    if slots.get("origin_airport_code"):
+        chat_fields["origin_code"] = slots.get("origin_airport_code")
+    if slots.get("origin_city_name"):
+        chat_fields["origin_name"] = slots.get("origin_city_name")
+    elif slots.get("origin_airport_code"):
+        chat_fields["origin_name"] = slots.get("origin_airport_code")
+    if slots.get("destination_airport_code"):
+        chat_fields["destination_code"] = slots.get("destination_airport_code")
+    if slots.get("destination_city_name"):
+        chat_fields["destination_name"] = slots.get("destination_city_name")
+        chat_fields["destination_city_name"] = slots.get("destination_city_name")
+    elif slots.get("destination_city_code"):
+        # Use destination_city_code as fallback for destination_name
+        chat_fields["destination_name"] = slots.get("destination_city_code")
+    if slots.get("destination_city_code"):
+        chat_fields["destination_city_code"] = slots.get("destination_city_code")
+    if dates.get("start"):
+        try:
+            chat_fields["start_date"] = date.fromisoformat(dates.get("start"))
+        except (ValueError, TypeError):
+            pass
+    if dates.get("end"):
+        try:
+            chat_fields["end_date"] = date.fromisoformat(dates.get("end"))
+        except (ValueError, TypeError):
+            pass
+    if pax.get("adults") is not None:
+        chat_fields["adults"] = pax.get("adults", 1)
+    if "kids" in pax and pax.get("kids") is not None:
+        chat_fields["kids"] = pax.get("kids", 0)
+    if slots.get("budget") is not None:
+        chat_fields["budget"] = slots.get("budget")
+    if hotel.get("request") is not None:
+        chat_fields["hotel_request"] = hotel.get("request")
+    if "amenities" in hotel:  # Check if key exists, not if truthy (empty lists are falsy)
+        chat_fields["hotel_amenities"] = hotel.get("amenities", [])
+    if hotel.get("rating") is not None:
+        chat_fields["hotel_rating"] = hotel.get("rating")
+    if slots.get("car") is not None:
+        chat_fields["car"] = slots.get("car")
+    if "attractions" in slots:  # Check if key exists, not if truthy (empty lists are falsy)
+        chat_fields["attractions"] = slots.get("attractions", [])
+    
+    return chat_fields
+
+
 def _create_chat_from_slots(
     db: Session,
     chat_service: ChatService,
-    user_id: UUID,
+    user_id: Optional[UUID],
     returned_slots: Dict[str, Any],
     slot_id: Optional[str],
 ) -> Optional[UUID]:
@@ -144,7 +213,7 @@ def _create_chat_from_slots(
     Args:
         db: Database session
         chat_service: Chat service instance
-        user_id: User ID
+        user_id: User ID (None for anonymous/unauthenticated users)
         returned_slots: Slots from AI service response
         slot_id: Slot ID from AI service
     
@@ -162,6 +231,10 @@ def _create_chat_from_slots(
         return None
     
     try:
+        # Extract nested values from current_slots
+        pax = returned_slots.get("pax", {})
+        hotel = returned_slots.get("hotel", {})
+        
         chat_create = ChatCreate(
             slot_id=slot_id or returned_slots.get("slot_id"),
             origin_code=returned_slots.get("origin_airport_code") or "TBD",
@@ -172,15 +245,24 @@ def _create_chat_from_slots(
             destination_name=returned_slots.get("destination_city_name")
             or returned_slots.get("destination_city_code")
             or destination_code,
+            destination_city_name=returned_slots.get("destination_city_name"),
+            destination_city_code=returned_slots.get("destination_city_code"),
             start_date=date.fromisoformat(start_date_str),
             end_date=date.fromisoformat(end_date_str),
-            adults=returned_slots.get("pax", {}).get("adults", 1) or 1,
+            adults=pax.get("adults") if pax.get("adults") is not None else 1,
+            kids=pax.get("kids") if pax.get("kids") is not None else 0,
             budget=returned_slots.get("budget"),
+            hotel_request=hotel.get("request"),
+            hotel_amenities=hotel.get("amenities", []),
+            hotel_rating=hotel.get("rating"),
+            car=returned_slots.get("car"),
+            attractions=returned_slots.get("attractions", []),
             status="draft",
         )
         
         chat = chat_service.create_chat(db, user_id, chat_create)
-        logger.info(f"Created chat {chat.id} for user {user_id}")
+        user_info = f"user {user_id}" if user_id else "anonymous user"
+        logger.info(f"Created chat {chat.id} for {user_info}")
         return chat.id
     
     except (ValueError, KeyError, TypeError) as e:
@@ -326,6 +408,106 @@ def _merge_plan_data(
         "car": car or {},
         "attractions": merged_attractions,
     }
+
+
+def _persist_chat_data_background(
+    user_id: Optional[UUID],
+    chat_id: Optional[UUID],
+    current_slots: Optional[Dict[str, Any]],
+    returned_slots: Dict[str, Any],
+    final_slot_id: Optional[str],
+    message: str,
+    ai_response: Dict[str, Any],
+    is_complete_plan: bool,
+) -> None:
+    """
+    Background task to persist chat data (messages, plans, chat updates).
+    This runs asynchronously after the response is returned to the user.
+    
+    Args:
+        user_id: User ID (None for anonymous users)
+        chat_id: Existing chat ID (if provided)
+        current_slots: Original current_slots from request
+        returned_slots: Slots from AI response
+        final_slot_id: Final slot_id
+        message: User's message
+        ai_response: AI service response
+        is_complete_plan: Whether this is a complete plan response
+    """
+    # Create a new database session for background task
+    db = SessionLocal()
+    try:
+        chat_service = ChatService()
+        chat_message_service = ChatMessageService()
+        plan_service = PlanService()
+        
+        # Get or create chat record
+        chat = None
+        final_chat_id = chat_id
+        
+        if chat_id:
+            chat = chat_service.get_by_id(db, chat_id)
+            if chat and user_id and chat.user_id != user_id:
+                logger.warning(f"Background task: Chat {chat_id} doesn't belong to user {user_id}")
+                return
+        
+        # If chat was already created synchronously (for quick response), just update it
+        # Otherwise, update existing chat with latest data from current_slots
+        if chat:
+            # Determine which current_slots to use
+            if is_complete_plan:
+                slots_for_update = current_slots if current_slots else {}
+            else:
+                slots_for_update = returned_slots if returned_slots else {}
+            
+            # Ensure slot_id is in slots_for_update if we have it
+            if final_slot_id and slots_for_update and isinstance(slots_for_update, dict):
+                slots_for_update["slot_id"] = final_slot_id
+            
+            # Extract individual fields from current_slots and update chat
+            if slots_for_update:
+                chat_fields = _extract_chat_fields_from_slots(slots_for_update)
+                if chat_fields:
+                    from models.chat import ChatUpdate
+                    chat_update = ChatUpdate(**chat_fields)
+                    chat = chat_service.update_chat(db, chat_id, chat_update)
+                    logger.info(f"Background: Updated chat {chat_id} with fields from current_slots")
+        
+        # Create chat if it doesn't exist and we have minimum required data
+        if not chat:
+            if is_complete_plan:
+                slots_for_chat = current_slots if current_slots else {}
+                if not slots_for_chat and final_slot_id:
+                    slots_for_chat = {"slot_id": final_slot_id}
+            else:
+                slots_for_chat = returned_slots if returned_slots else {}
+            
+            if final_slot_id and slots_for_chat and isinstance(slots_for_chat, dict):
+                slots_for_chat["slot_id"] = final_slot_id
+            
+            final_chat_id = _create_chat_from_slots(
+                db, chat_service, user_id, slots_for_chat, final_slot_id
+            )
+            
+            if final_chat_id:
+                logger.info(f"Background: Created chat {final_chat_id} for {'user ' + str(user_id) if user_id else 'anonymous user'}")
+        
+        # Persist messages if we have chat_id and slot_id
+        if final_chat_id and final_slot_id:
+            _persist_chat_messages(
+                db, chat_message_service, final_chat_id, final_slot_id, message, ai_response
+            )
+            
+            # Create plan if AI service returned a complete travel plan
+            if ai_response.get("plan_id"):
+                _create_plan_from_ai_response(
+                    db, plan_service, final_chat_id, final_slot_id, ai_response, returned_slots
+                )
+    
+    except Exception as e:
+        logger.error(f"Error in background task for chat persistence: {e}", exc_info=True)
+    finally:
+        db.close()
 
 
 def _create_plan_from_ai_response(
@@ -490,30 +672,35 @@ async def _call_ai_service(message: str, current_slots: Optional[Dict[str, Any]]
 
 @router.post("/chat")
 async def chat_with_ai(
+    background_tasks: BackgroundTasks,
     request_data: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
     chat_service: ChatService = Depends(get_chat_service),
     chat_message_service: ChatMessageService = Depends(get_chat_message_service),
     plan_service: PlanService = Depends(get_plan_service),
-    current_user: User = Depends(get_current_active_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> Dict[str, Any]:
     """
     Unified endpoint for AI chat interaction.
     
+    This endpoint works for both authenticated and unauthenticated users:
+    - Authenticated users: Full functionality with chat/plan persistence
+    - Unauthenticated users: AI interaction only (no database persistence)
+    
     This endpoint:
     1. Forwards user message to AI service
     2. Parses AI response (ParseResponse or TravelOptionsResponse)
-    3. Creates/updates Chat record if needed
-    4. Persists user message and AI reply
-    5. Creates Plan record if travel plan is generated
+    3. (Authenticated only) Creates/updates Chat record if needed
+    4. (Authenticated only) Persists user message and AI reply
+    5. (Authenticated only) Creates Plan record if travel plan is generated
     
     Request body:
     - message: str (required) - User's chat message
     - current_slots: dict (optional) - Current slot values from previous interactions (includes slot_id if available)
-    - chat_id: UUID (optional) - Existing chat ID
+    - chat_id: UUID (optional) - Existing chat ID (requires authentication)
     
     Returns:
-        AI service response with added chat_id and slot_id
+        AI service response with added chat_id (if authenticated) and slot_id
     """
     # Validate request
     message = request_data.get("message")
@@ -565,48 +752,9 @@ async def chat_with_ai(
     
     logger.info(f"Final slot_id: {slot_id}, is_complete_plan: {is_complete_plan}, is_parse_response: {is_parse_response}")
     
-    # Get or create chat record
-    chat = None
-    if chat_id:
-        chat = chat_service.get_by_id(db, chat_id)
-        if chat and chat.user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not enough permissions for this chat",
-            )
+    # Check if user is authenticated for database persistence
+    is_authenticated = current_user is not None
     
-    # Create chat if it doesn't exist and we have minimum required data
-    if not chat:
-        # For TravelOptionsResponse: use original current_slots from request (it has all the data)
-        # For ParseResponse: use returned_slots from response
-        if is_complete_plan:
-            # TravelOptionsResponse doesn't include current_slots, so use original request data
-            slots_for_chat = current_slots if current_slots else {}
-            # Try to extract slot data from the response if available
-            if not slots_for_chat and slot_id:
-                # Create minimal slots structure with slot_id
-                slots_for_chat = {"slot_id": slot_id}
-        else:
-            # ParseResponse includes current_slots
-            slots_for_chat = returned_slots if returned_slots else {}
-        
-        # Ensure slot_id is in slots_for_chat if we have it
-        if slot_id and slots_for_chat and isinstance(slots_for_chat, dict):
-            slots_for_chat["slot_id"] = slot_id
-        
-        logger.info(f"Creating chat - is_complete_plan: {is_complete_plan}, slots_for_chat keys: {list(slots_for_chat.keys()) if slots_for_chat else None}")
-        
-        chat_id = _create_chat_from_slots(
-            db, chat_service, current_user.id, slots_for_chat, slot_id
-        )
-        
-        if chat_id:
-            logger.info(f"Created chat {chat_id} for user {current_user.id}")
-        else:
-            logger.warning(f"Could not create chat - insufficient data. slots_for_chat: {slots_for_chat}")
-    
-    # Persist messages if we have chat_id and slot_id
-    final_chat_id = chat_id
     # Get slot_id from multiple possible sources
     final_slot_id = (
         slot_id 
@@ -614,26 +762,72 @@ async def chat_with_ai(
         or (returned_slots.get("slot_id") if returned_slots else None)  # From ParseResponse (in current_slots)
     )
     
-    logger.info(f"Final chat_id: {final_chat_id}, final_slot_id: {final_slot_id}")
+    # Do minimal synchronous work: just verify/get chat_id for response
+    # All heavy DB operations (updates, messages, plans) will be done in background
+    final_chat_id = chat_id
+    user_id = current_user.id if current_user else None
     
-    # If we have a plan but no slot_id, log warning but still try to proceed
-    if is_complete_plan and not final_slot_id:
-        logger.warning("TravelOptionsResponse received but slot_id is missing - this should not happen")
-    
-    if final_chat_id and final_slot_id:
-        _persist_chat_messages(
-            db, chat_message_service, final_chat_id, final_slot_id, message, ai_response
-        )
-        
-        # Create plan if AI service returned a complete travel plan
-        if ai_response.get("plan_id"):
-            _create_plan_from_ai_response(
-                db, plan_service, final_chat_id, final_slot_id, ai_response, returned_slots
+    # Quick synchronous check: verify chat exists if provided
+    if is_authenticated and chat_id:
+        chat = chat_service.get_by_id(db, chat_id)
+        if chat and chat.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions for this chat",
             )
+        if not chat:
+            final_chat_id = None  # Chat doesn't exist, will be created in background
     
-    # Return AI response with added context
+    # For unauthenticated users, reject chat_id access
+    if not is_authenticated and chat_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to access existing chats",
+        )
+    
+    # Quick synchronous chat creation if needed (minimal DB work, just to get chat_id for response)
+    # This is fast (single INSERT) and improves UX by returning chat_id immediately
+    if not final_chat_id:
+        # Determine which slots to use for quick chat creation
+        if is_complete_plan:
+            slots_for_chat = current_slots if current_slots else {}
+            if not slots_for_chat and final_slot_id:
+                slots_for_chat = {"slot_id": final_slot_id}
+        else:
+            slots_for_chat = returned_slots if returned_slots else {}
+        
+        if final_slot_id and slots_for_chat and isinstance(slots_for_chat, dict):
+            slots_for_chat["slot_id"] = final_slot_id
+        
+        # Quick synchronous chat creation (if we have minimum data)
+        # This is fast and allows us to return chat_id in response
+        if slots_for_chat:
+            final_chat_id = _create_chat_from_slots(
+                db, chat_service, user_id, slots_for_chat, final_slot_id
+            )
+            if final_chat_id:
+                logger.info(f"Quick-created chat {final_chat_id} for response")
+    
+    # Schedule background task for all database persistence operations
+    # This allows us to return the response immediately
+    background_tasks.add_task(
+        _persist_chat_data_background,
+        user_id=user_id,
+        chat_id=final_chat_id,
+        current_slots=current_slots,
+        returned_slots=returned_slots,
+        final_slot_id=final_slot_id,
+        message=message,
+        ai_response=ai_response,
+        is_complete_plan=is_complete_plan,
+    )
+    
+    # Return AI response immediately (database operations happen in background)
     result = dict(ai_response)
     result["chat_id"] = str(final_chat_id) if final_chat_id else None
     result["slot_id"] = final_slot_id
+    if not is_authenticated:
+        result["requires_authentication"] = True
+        result["message"] = "Your chat and plans have been saved. Please authenticate to view and manage your saved chats and plans."
     
     return result

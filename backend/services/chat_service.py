@@ -23,10 +23,10 @@ class ChatService(BaseService[Chat]):
         """Get all chats for a specific user."""
         return self.chat_repository.get_user_chats(db, user_id, skip=skip, limit=limit)
     
-    def create_chat(self, db: Session, user_id: UUID, chat_create: ChatCreate) -> Chat:
-        """Create a new chat for a user."""
+    def create_chat(self, db: Session, user_id: Optional[UUID], chat_create: ChatCreate) -> Chat:
+        """Create a new chat for a user (or anonymous if user_id is None)."""
         chat_data = chat_create.dict()
-        chat_data['user_id'] = user_id
+        chat_data['user_id'] = user_id  # Can be None for anonymous users
         chat_data['share_code'] = self._generate_share_code()
         
         return self.chat_repository.create(db, chat_data)
@@ -109,10 +109,18 @@ class ChatService(BaseService[Chat]):
             'origin_name': original_chat.origin_name,
             'destination_code': original_chat.destination_code,
             'destination_name': original_chat.destination_name,
+            'destination_city_name': original_chat.destination_city_name,
+            'destination_city_code': original_chat.destination_city_code,
             'start_date': original_chat.start_date,
             'end_date': original_chat.end_date,
             'adults': original_chat.adults,
+            'kids': original_chat.kids,
             'budget': original_chat.budget,
+            'hotel_request': original_chat.hotel_request,
+            'hotel_amenities': original_chat.hotel_amenities,
+            'hotel_rating': original_chat.hotel_rating,
+            'car': original_chat.car,
+            'attractions': original_chat.attractions,
             'status': 'draft',
             'notes': f"Copy of: {original_chat.notes or 'Chat'}",
             'share_code': self._generate_share_code()
@@ -121,9 +129,9 @@ class ChatService(BaseService[Chat]):
         return self.chat_repository.create(db, chat_data)
     
     def delete_chat(self, db: Session, chat_id: UUID, user_id: UUID) -> bool:
-        """Delete a chat (only if owned by user)."""
+        """Delete a chat (only if owned by user). Anonymous chats (user_id=None) cannot be deleted."""
         chat = self.chat_repository.get_by_id(db, chat_id)
-        if not chat or chat.user_id != user_id:
+        if not chat or chat.user_id is None or chat.user_id != user_id:
             return False
         
         deleted_chat = self.chat_repository.delete(db, chat_id)

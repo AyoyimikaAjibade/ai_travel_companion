@@ -44,7 +44,12 @@ def get_chat(
             detail="Chat not found"
         )
     
-    # Check if user owns the chat
+    # Check if user owns the chat (anonymous chats have user_id=None and can't be accessed)
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
     if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -69,7 +74,12 @@ def get_chat_by_slot_id(
             detail="Chat not found"
         )
     
-    # Check if user owns the chat
+    # Check if user owns the chat (anonymous chats have user_id=None and can't be accessed)
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
     if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
