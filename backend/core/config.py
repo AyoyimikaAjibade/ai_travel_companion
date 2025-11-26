@@ -28,7 +28,7 @@ class Settings:
     # CORS - Parse from environment or use defaults
     @property
     def BACKEND_CORS_ORIGINS(self) -> List[str]:
-        cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000")
+        cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000,http://localhost:8001")
         return [origin.strip() for origin in cors_origins.split(",")]
     
     # Database
@@ -53,8 +53,6 @@ class Settings:
     # AI/ML settings
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-    # AI_SERVICE_BASE_URL: str = os.getenv("AI_SERVICE_BASE_URL", "http://localhost:8001")
-    AI_SERVICE_BASE_URL: str = os.getenv("AI_SERVICE_BASE_URL", "http://148.100.79.191:8000")
     
     # File storage
     UPLOAD_FOLDER: str = os.getenv("UPLOAD_FOLDER", os.path.join(os.path.dirname(__file__), "..", "uploads"))

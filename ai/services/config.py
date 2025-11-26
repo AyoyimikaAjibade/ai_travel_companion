@@ -21,3 +21,6 @@ AMADEUS_URL  = "https://test.api.amadeus.com"
 EXPEDIA_URL  = "https://api.expediagroup.com/rapid/v3"
 BOOKING_URL  = "https://distribution-xml.booking.com/2.9"
 TIQETS_URL   = "https://api.tiqets.com/v2"
+
+# Backend Service URL for persistence
+BACKEND_SERVICE_BASE_URL = os.getenv("BACKEND_SERVICE_BASE_URL", "http://localhost:8001")

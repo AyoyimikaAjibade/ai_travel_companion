@@ -12,7 +12,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
-import json, ulid
+import json, ulid, requests
 from datetime import datetime, timedelta
 
 from base_models import * 
@@ -23,6 +23,7 @@ from services.attractions_service import amadeus_search_attractions
 from services.rental_car_service import car_search_mock, infer_car_types_by_pax
 from services.utils import merge_slots_preserve_id, pick_near_target
 from services.packages_service import build_three_budget_packages
+from services.config import BACKEND_SERVICE_BASE_URL
 
 load_dotenv()
 
@@ -35,6 +36,77 @@ app = FastAPI (
 # Load rental car data once when the app starts
 with open("car_list_mock.json") as f:
     CARS_DATA = json.load(f)
+
+
+# ------------------------------
+# Helper Functions
+# ------------------------------
+
+def _persist_to_backend(
+    user_id: Optional[str],
+    chat_id: Optional[str],
+    current_slots: Optional[Dict[str, Any]],
+    returned_slots: Dict[str, Any],
+    slot_id: str,
+    message: str,
+    ai_response: Dict[str, Any],
+    is_complete_plan: bool
+) -> None:
+    """
+    Call backend service to persist chat data.
+    This runs in the background and doesn't block the response.
+    
+    Args:
+        user_id: User ID (optional)
+        chat_id: Chat ID (optional)
+        current_slots: Original current_slots from request
+        returned_slots: Slots from AI response
+        slot_id: Final slot_id
+        message: User's message
+        ai_response: AI service response
+        is_complete_plan: Whether this is a complete plan response
+    """
+    try:
+        # Convert slots to dict if they're Pydantic models
+        if hasattr(current_slots, 'model_dump'):
+            current_slots = current_slots.model_dump(mode='json', exclude_none=True)
+        if hasattr(returned_slots, 'model_dump'):
+            returned_slots = returned_slots.model_dump(mode='json', exclude_none=True)
+        
+        # Prepare persistence payload
+        persist_payload = {
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "current_slots": current_slots,
+            "returned_slots": returned_slots,
+            "slot_id": slot_id,
+            "message": message,
+            "ai_response": ai_response,
+            "is_complete_plan": is_complete_plan
+        }
+        
+        # Call backend persistence endpoint (fire and forget)
+        backend_url = f"{BACKEND_SERVICE_BASE_URL}/api/v1/persist-chat"
+        print(f"🔄 Calling backend to persist data: {backend_url}")
+        
+        response = requests.post(
+            backend_url,
+            json=persist_payload,
+            timeout=10.0  # Short timeout since we don't want to block
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Backend persistence successful: {result.get('message', 'OK')}")
+        else:
+            print(f"⚠️ Backend persistence returned status {response.status_code}: {response.text}")
+    
+    except requests.exceptions.Timeout:
+        print("⚠️ Backend persistence request timed out (non-critical)")
+    except requests.exceptions.ConnectionError:
+        print(f"⚠️ Could not connect to backend at {BACKEND_SERVICE_BASE_URL} (non-critical)")
+    except Exception as e:
+        print(f"⚠️ Error calling backend persistence endpoint (non-critical): {e}")
 
 
 # ------------------------------
@@ -237,8 +309,21 @@ def chat(request: ChatRequest):
             final_slot_id = ulid.new().str
             print(f"⚠️ Generated new slot_id: {final_slot_id}")
 
+        # Prepare AI response for backend persistence
+        ai_response_data = {
+            "plan_id": plan_id,
+            "slot_id": final_slot_id,
+            "flight": flight.model_dump(mode='json', exclude_none=True) if flight else None,
+            "hotel": hotel.model_dump(mode='json', exclude_none=True) if hotel else None,
+            "car": car.model_dump(mode='json', exclude_none=True) if car else None,
+            "attractions": [attr.model_dump(mode='json', exclude_none=True) for attr in attractions_list] if attractions_list else [],
+            "created_time": created_time,
+            "updated_time": updated_time,
+            "reply": reply
+        }
+        
         # Return TravelOptionsResponse with search results
-        return TravelOptionsResponse(
+        response = TravelOptionsResponse(
             plan_id = plan_id,
             slot_id = final_slot_id,
             flight = flight,
@@ -249,10 +334,49 @@ def chat(request: ChatRequest):
             updated_time = updated_time,
             reply = reply
         )
+        
+        # Call backend to persist data (fire and forget - non-blocking)
+        try:
+            _persist_to_backend(
+                user_id=request.user_id,
+                chat_id=request.chat_id,
+                current_slots=request.current_slots,
+                returned_slots=new_current_slots.model_dump(mode='json', exclude_none=True),
+                slot_id=final_slot_id,
+                message=request.message,
+                ai_response=ai_response_data,
+                is_complete_plan=True
+            )
+        except Exception as e:
+            print(f"⚠️ Error calling backend persistence (non-critical): {e}")
+        
+        return response
     else:
         # Information is missing - return ParseResponse to ask for clarification
         print(f"❌ Missing information: {missing}")
-        return ParseResponse(current_slots=new_current_slots, missing=missing, reply=reply)
+        
+        response = ParseResponse(current_slots=new_current_slots, missing=missing, reply=reply)
+        
+        # Call backend to persist data even for incomplete responses (fire and forget)
+        try:
+            _persist_to_backend(
+                user_id=request.user_id,
+                chat_id=request.chat_id,
+                current_slots=request.current_slots,
+                returned_slots=new_current_slots.model_dump(mode='json', exclude_none=True),
+                slot_id=new_current_slots.slot_id,
+                message=request.message,
+                ai_response={
+                    "current_slots": new_current_slots.model_dump(mode='json', exclude_none=True),
+                    "missing": missing,
+                    "reply": reply
+                },
+                is_complete_plan=False
+            )
+        except Exception as e:
+            print(f"⚠️ Error calling backend persistence (non-critical): {e}")
+        
+        return response
 
 # ------------------------------------------------------------------------
 # For Packages (Three Random Travel Plans)

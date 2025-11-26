@@ -3,9 +3,16 @@
   "name": "AI Travel Companion - Local",
   "values": [
     {
-      "key": "base_url",
+      "key": "backend_base_url",
+      "value": "http://localhost:8001",
+      "description": "Backend API base URL",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ai_service_url",
       "value": "http://localhost:8000",
-      "description": "Base URL for the API server",
+      "description": "AI service base URL",
       "type": "default",
       "enabled": true
     },
@@ -18,8 +25,8 @@
     },
     {
       "key": "full_url",
-      "value": "{{base_url}}{{api_version}}",
-      "description": "Complete API URL",
+      "value": "{{backend_base_url}}{{api_version}}",
+      "description": "Complete backend API URL",
       "type": "default",
       "enabled": true
     },
@@ -66,13 +73,6 @@
       "enabled": true
     },
     {
-      "key": "temp_password",
-      "value": "",
-      "description": "Temporary password from password reset",
-      "type": "secret",
-      "enabled": true
-    },
-    {
       "key": "chat_id",
       "value": "",
       "description": "Current chat ID (auto-populated)",
@@ -90,20 +90,6 @@
       "key": "plan_id",
       "value": "",
       "description": "Current plan ID (auto-populated)",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "share_code",
-      "value": "",
-      "description": "Chat share code for public access",
-      "type": "default",
-      "enabled": true
-    },
-    {
-      "key": "ai_service_url",
-      "value": "http://localhost:8001",
-      "description": "AI service base URL",
       "type": "default",
       "enabled": true
     }

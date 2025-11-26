@@ -114,7 +114,6 @@ def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:
         "JSON:"
     )
 
-
     GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
     headers = {
     "Content-Type": "application/json",
@@ -139,9 +138,6 @@ def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:
 
         response_data = response.json()
         raw_json_string = response_data['candidates'][0]['content']['parts'][0]['text']
-        
-        print("--- 🖥️ Gemini Raw Output 🖥️ ---")
-        print(raw_json_string)
         
         return json.loads(raw_json_string)
 
