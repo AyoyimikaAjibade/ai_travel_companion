@@ -297,12 +297,14 @@
                   "    const responseData = pm.response.json();",
                   "    if (responseData.slot_id) {",
                   "        pm.environment.set('slot_id', responseData.slot_id);",
+                  "        console.log('✅ Slot ID saved:', responseData.slot_id);",
                   "    }",
                   "    if (responseData.plan_id) {",
                   "        console.log('✅ Plan generated! Plan ID:', responseData.plan_id);",
                   "    } else if (responseData.missing && responseData.missing.length > 0) {",
-                  "        console.log('⚠️ Missing fields:', responseData.missing);",
+                  "        console.log('⚠️ Missing fields:', responseData.missing.join(', '));",
                   "    }",
+                  "    console.log('💬 AI Response:', responseData.reply || 'Response received');",
                   "}"
                 ]
               }
@@ -321,7 +323,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from November 12 to November 21 for 2 adults and 2 kids. I need a rental car during the trip. My budget is $5k\",\n  \"current_slots\": null,\n  \"user_id\": null,\n  \"chat_id\": null\n}"
+              "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from November 12 to November 21 for 2 adults and 2 kids. I need a rental car during the trip. My budget is $5k\",\n  \"current_slots\": null,\n  \"user_id\": \"{{user_id}}\",\n  \"chat_id\": null\n}"
             },
             "url": {
               "raw": "{{ai_service_url}}/chat",
@@ -341,7 +343,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{full_url}}/chats?skip=0&limit=100",
+              "raw": "{{full_url}}/chats/?skip=0&limit=100",
               "host": ["{{full_url}}"],
               "path": ["chats"],
               "query": [

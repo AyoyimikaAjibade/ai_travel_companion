@@ -73,8 +73,30 @@ The application follows a microservices architecture with clear separation of co
                         │ HTTP/REST API
                         │
 ┌───────────────────────▼─────────────────────────────────────┐
-│              Backend Service (FastAPI)                      │
+│              AI Service (Entry Point - FastAPI)             │
 │              Port 8000                                       │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │   FastAPI    │───▶│   Models     │───▶│   Services  │ │
+│  │  Endpoints   │    │  (Pydantic)  │    │  (Business  │ │
+│  │   /chat      │    │              │    │   Logic)    │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│         │                    │                    │       │
+│         └────────────────────┼────────────────────┘       │
+│                              │                            │
+│  ┌───────────────────────────┴───────────────────────────┐ │
+│  │              External API Integrations               │ │
+│  ├──────────────────┬──────────────────┬─────────────────┤ │
+│  │  Google Gemini   │   Amadeus APIs   │   Mock Data     │ │
+│  │  (NLP Parsing)   │  (Travel Search) │  (Car Rental)   │ │
+│  └──────────────────┴──────────────────┴─────────────────┘ │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        │ HTTP/REST API (Persistence)
+                        │ POST /api/v1/ai/persist-chat
+                        │
+┌───────────────────────▼─────────────────────────────────────┐
+│              Backend Service (Persistence - FastAPI)        │
+│              Port 8001                                       │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │   API Layer  │  │  Service     │  │ Repository   │      │
 │  │  (Endpoints) │─▶│  (Business   │─▶│  (Data Access)│      │
@@ -87,40 +109,16 @@ The application follows a microservices architecture with clear separation of co
 │  │              PostgreSQL Database                      │  │
 │  │  (Users, Chats, Plans, ChatMessages)                 │  │
 │  └───────────────────────────────────────────────────────┘  │
-│                            │                               │
-│         ┌──────────────────┴──────────────────┐          │
-│         │                                       │          │
-└─────────┼───────────────────────────────────────┼──────────┘
-          │                                       │
-          │ HTTP/REST API                         │
-          │                                       │
-┌─────────▼───────────────────────────────────────▼──────────┐
-│              AI Service (FastAPI)                           │
-│              Port 8001                                      │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │   FastAPI    │───▶│   Models     │───▶│   Services  │ │
-│  │  Endpoints   │    │  (Pydantic)  │    │  (Business  │ │
-│  │              │    │              │    │   Logic)    │ │
-│  └──────────────┘    └──────────────┘    └──────────────┘ │
-│         │                    │                    │       │
-│         └────────────────────┼────────────────────┘       │
-│                              │                            │
-│  ┌───────────────────────────┴───────────────────────────┐ │
-│  │              External API Integrations               │ │
-│  ├──────────────────┬──────────────────┬─────────────────┤ │
-│  │  Google Gemini   │   Amadeus APIs   │   Mock Data     │ │
-│  │  (NLP Parsing)   │  (Travel Search) │  (Car Rental)   │ │
-│  └──────────────────┴──────────────────┴─────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Components
 
 - **Frontend**: React Native mobile application with Expo
-- **Backend**: FastAPI Python web service with PostgreSQL database
-- **AI Service**: Separate AI processing service using Google Gemini API for natural language understanding
+- **AI Service**: Entry point service (Port 8000) using Google Gemini API for natural language understanding and travel search
+- **Backend**: Persistence service (Port 8001) with FastAPI and PostgreSQL database for data management
 - **Database**: PostgreSQL with SQLAlchemy ORM for persistent storage
-- **Authentication**: JWT-based authentication system
+- **Authentication**: JWT-based authentication system (optional for chat, required for viewing saved chats/plans)
 
 ## 🛠️ Technology Stack
 
@@ -215,8 +213,8 @@ Before setting up the project, ensure you have the following installed:
    # CORS
    CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://localhost:19006
    
-   # AI Service Configuration
-   AI_SERVICE_BASE_URL=http://localhost:8001
+   # Backend Service Configuration (for AI service to persist data)
+   BACKEND_SERVICE_BASE_URL=http://localhost:8001
    
    # External APIs
    GEMINI_API_KEY=your-gemini-api-key
@@ -282,14 +280,16 @@ Before setting up the project, ensure you have the following installed:
    AMADEUS_API_SECRET=your-amadeus-api-secret
    ```
 
-3. **Run the AI service**
+3. **Run the AI service (Entry Point - Port 8000)**
    ```bash
-   python3 -m uvicorn ai_npu:app --reload --port 8001
+   python3 -m uvicorn ai_npu:app --reload --port 8000
    ```
 
    The AI service will be available at:
-   - **API**: http://localhost:8001
-   - **Swagger UI**: http://localhost:8001/docs
+   - **API**: http://localhost:8000
+   - **Swagger UI**: http://localhost:8000/docs
+   
+   **Note**: The AI service calls the backend service (port 8001) to persist chat data.
 
 ## ⚙️ Environment Configuration
 
@@ -301,8 +301,8 @@ Create a `.env` file in the backend directory with the following variables:
 # Database Configuration
 DATABASE_URL=postgresql://username:password@localhost/twos_db
 
-# AI Service Configuration
-AI_SERVICE_BASE_URL=http://localhost:8001
+# Backend Service Configuration (for AI service persistence)
+BACKEND_SERVICE_BASE_URL=http://localhost:8001
 
 # Security Settings
 SECRET_KEY=your-super-secret-key-change-in-production
@@ -376,6 +376,7 @@ The application uses JWT-based authentication with the following features:
 - **Logout**: Server-side logout tracking for audit purposes
 - **Password Reset**: Generates temporary passwords for secure password recovery
 - **Password Change**: Allows users to change passwords with current password verification
+- **Optional Authentication**: Chat with AI service is available without authentication (anonymous chats), but viewing saved chats/plans requires authentication
 
 #### User Registration Format
 ```json
@@ -393,6 +394,8 @@ The application uses JWT-based authentication with the following features:
 - `POST /api/v1/auth/logout` - User logout
 - `POST /api/v1/auth/password-reset-request` - Request password reset
 - `POST /api/v1/auth/change-password` - Change password
+
+**Note**: Chat endpoints work without authentication (anonymous mode), but viewing saved chats/plans requires authentication.
 
 ### User Management
 - `GET /api/v1/users/me` - Get current user profile
@@ -412,8 +415,8 @@ The application uses JWT-based authentication with the following features:
 - `DELETE /api/v1/plans/{plan_id}` - Delete plan
 
 ### AI Integration Endpoints
-- `POST /api/v1/ai/chat` - Chat with AI service (unified endpoint)
-- `POST /api/v1/ai/chat/plan` - Save plan from chat
+- `POST /chat` - Chat with AI service (on AI service at port 8000)
+- `POST /api/v1/ai/persist-chat` - Persist chat data (internal, called by AI service)
 
 ### Health Check
 - `GET /api/v1/health` - API health status
@@ -423,18 +426,20 @@ The application uses JWT-based authentication with the following features:
 
 ### Overview
 
-The AI service is a FastAPI microservice that handles:
+The AI service is the **entry point** (Port 8000) that handles:
 - **Natural Language Processing (NLP)**: Uses Google Gemini to parse user messages into structured travel data
 - **Travel Search Integration**: Calls Amadeus APIs to find flights, hotels, attractions, and cars
 - **Conversation Management**: Tracks user interactions using `slot_id` (ULID) for session continuity
 - **Plan Generation**: Automatically generates travel plans when all required information is collected
+- **Data Persistence**: Automatically calls backend service to save chats, messages, and plans
 
 ### AI Service Architecture
 
 ```
-AI Service (Port 8001)
+AI Service (Port 8000 - Entry Point)
     │
     ├─▶ POST /chat - Main chat endpoint
+    │   ├─▶ Accepts optional user_id, chat_id for authenticated users
     │   ├─▶ Parses user message with Gemini
     │   ├─▶ Merges with previous slots (preserves slot_id)
     │   ├─▶ If complete: Searches travel options
@@ -442,9 +447,13 @@ AI Service (Port 8001)
     │   │   ├─▶ Amadeus Hotel Offers API
     │   │   ├─▶ Amadeus Activities API
     │   │   └─▶ Mock Car Rental (future: Amadeus Car API)
-    │   └─▶ Returns ParseResponse or TravelOptionsResponse
+    │   ├─▶ Returns ParseResponse or TravelOptionsResponse immediately
+    │   └─▶ Calls Backend Service to persist data (non-blocking)
+    │       └─▶ POST /api/v1/ai/persist-chat
+    │           ├─▶ Creates/updates Chat by slot_id
+    │           ├─▶ Saves ChatMessage (user + AI reply)
+    │           └─▶ Creates Plan (if complete plan generated)
     │
-    ├─▶ POST /search - Direct search (bypasses parsing)
     └─▶ GET /health - Health check
 ```
 
@@ -456,19 +465,12 @@ AI Service (Port 8001)
 User: "I want to fly from SF to Paris"
     │
     ▼
-Frontend → Backend: POST /api/v1/ai/chat
+Frontend → AI Service: POST /chat (Port 8000)
     {
       "message": "I want to fly from SF to Paris",
       "current_slots": null,
-      "chat_id": null,
-      "slot_id": null
-    }
-    │
-    ▼
-Backend → AI Service: POST /chat
-    {
-      "message": "I want to fly from SF to Paris",
-      "current_slots": null
+      "user_id": "optional-uuid",  // Optional for authenticated users
+      "chat_id": null
     }
     │
     ▼
@@ -477,23 +479,32 @@ AI Service:
     2. Calls Gemini → parses message
     3. Merges parsed slots
     4. Checks missing fields
-    5. Returns ParseResponse (missing: ["dates", "pax", "budget"])
+    5. Returns ParseResponse immediately (missing: ["dates", "pax", "budget"])
     │
-    ▼
-Backend:
-    1. Creates Chat record (if minimum data available)
-    2. Saves user message to ChatMessage
-    3. Saves AI reply to ChatMessage
+    ├─▶ Response sent to Frontend immediately
+    │   {
+    │     "current_slots": {...},
+    │     "missing": ["dates", "pax", "budget"],
+    │     "reply": "I need to know your travel dates...",
+    │     "slot_id": "..."
+    │   }
     │
-    ▼
-Frontend: Receives ParseResponse
-    {
-      "current_slots": {...},
-      "missing": ["dates", "pax", "budget"],
-      "reply": "I need to know your travel dates...",
-      "chat_id": "...",
-      "slot_id": "..."
-    }
+    └─▶ AI Service → Backend: POST /api/v1/ai/persist-chat (non-blocking)
+        {
+          "slot_id": "...",
+          "user_id": "...",
+          "message": "...",
+          "returned_slots": {...},
+          "ai_response": {...},
+          "is_complete_plan": false
+        }
+        │
+        ▼
+        Backend:
+        1. Finds/Creates Chat by slot_id
+        2. Updates Chat with latest slots data
+        3. Saves user message to ChatMessage
+        4. Saves AI reply to ChatMessage
 ```
 
 #### 2. Complete Information Flow (Plan Generation)
@@ -502,19 +513,12 @@ Frontend: Receives ParseResponse
 User: "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car"
     │
     ▼
-Frontend → Backend: POST /api/v1/ai/chat
+Frontend → AI Service: POST /chat (Port 8000)
     {
       "message": "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car",
       "current_slots": { "slot_id": "...", ... },
-      "chat_id": "...",
-      "slot_id": "..."
-    }
-    │
-    ▼
-Backend → AI Service: POST /chat
-    {
-      "message": "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car",
-      "current_slots": { "slot_id": "...", ... }
+      "user_id": "optional-uuid",
+      "chat_id": null
     }
     │
     ▼
@@ -527,41 +531,57 @@ AI Service:
     6. Searches hotels → finds cheapest
     7. Searches attractions → finds top 3
     8. Searches car → finds recommended
-    9. Returns TravelOptionsResponse
+    9. Returns TravelOptionsResponse immediately
     │
-    ▼
-Backend:
-    1. Updates Chat record (if needed)
-    2. Saves user message to ChatMessage
-    3. Saves AI reply to ChatMessage
-    4. Creates Plan record from TravelOptionsResponse
+    ├─▶ Response sent to Frontend immediately
+    │   {
+    │     "plan_id": "...",
+    │     "slot_id": "...",
+    │     "flight": {...},
+    │     "hotel": {...},
+    │     "car": {...},
+    │     "attractions": [...],
+    │     "reply": "OK. I have updated your travel information."
+    │   }
     │
-    ▼
-Frontend: Receives TravelOptionsResponse
-    {
-      "plan_id": "...",
-      "slot_id": "...",
-      "flight": {...},
-      "hotel": {...},
-      "car": {...},
-      "attractions": [...],
-      "reply": "OK. I have updated your travel information.",
-      "chat_id": "..."
-    }
+    └─▶ AI Service → Backend: POST /api/v1/ai/persist-chat (non-blocking)
+        {
+          "slot_id": "...",
+          "user_id": "...",
+          "message": "...",
+          "returned_slots": {...},
+          "ai_response": {...},
+          "is_complete_plan": true
+        }
+        │
+        ▼
+        Backend:
+        1. Finds Chat by slot_id (or creates new if not exists)
+        2. Updates Chat with latest slots data
+        3. Saves user message to ChatMessage
+        4. Saves AI reply to ChatMessage
+        5. Creates NEW Plan record (tracks multiple plans per chat)
 ```
 
 ### Session Management
 
-**Slot ID Tracking**:
+**Slot ID Tracking** (Primary Identifier):
 - AI service generates `slot_id` (ULID) on first request
 - Backend stores `slot_id` in `Chat.slot_id` and `ChatMessage.slot_id`
 - Frontend sends `slot_id` in subsequent requests
 - AI service preserves `slot_id` across messages (merges slots)
+- **Chat lookup by slot_id**: Backend finds/updates chat by `slot_id` (same `slot_id` = same conversation)
 
-**Chat ID Tracking**:
+**Chat ID Tracking** (Secondary):
 - Backend generates `chat_id` (UUID) when creating `Chat` record
-- Frontend sends `chat_id` in subsequent requests
+- Frontend can send `chat_id` in requests (optional)
 - Backend links `ChatMessage` and `Plan` records to `Chat`
+
+**User ID Tracking** (Optional):
+- Authenticated users can pass `user_id` in chat request
+- Anonymous chats have `user_id = null`
+- Chats are viewable only by authenticated users who own them
+- Anonymous chats can be upgraded to authenticated when user logs in
 
 ### AI Service Models
 
@@ -656,11 +676,13 @@ ai_travel_companion/
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
-2. **AI Service Development**
+2. **AI Service Development** (Entry Point - Port 8000)
    ```bash
    cd ai
-   python3 -m uvicorn ai_npu:app --reload --port 8001
+   python3 -m uvicorn ai_npu:app --reload --port 8000
    ```
+   
+   **Note**: Ensure backend service is running on port 8001 for persistence.
 
 3. **Frontend Development**
    ```bash
@@ -769,10 +791,12 @@ Use the provided Postman collection in the `postman/` directory:
    gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
    ```
 
-3. **Deploy AI Service**
+3. **Deploy AI Service** (Entry Point - Port 8000)
    ```bash
-   gunicorn ai_npu:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8001
+   gunicorn ai_npu:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
    ```
+   
+   **Note**: Ensure backend service is running on port 8001 for persistence.
 
 4. **Deploy Frontend**
    ```bash

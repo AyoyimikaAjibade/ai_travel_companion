@@ -32,6 +32,13 @@
 - ✅ Auto-refreshes expired tokens
 - ✅ Collection-level Bearer auth setup
 - ✅ Smart pre-request token checking
+- ✅ Optional authentication for chat (can chat without login)
+
+### 🤖 **AI Service Integration**
+- ✅ Chat endpoint directly on AI service (port 8000)
+- ✅ Automatic persistence to backend service (port 8001)
+- ✅ Slot ID tracking for conversation continuity
+- ✅ Support for authenticated and anonymous users
 
 ### 📝 **Pre-filled Test Data**
 - ✅ Default test user credentials (username, email, password)

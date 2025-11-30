@@ -5,14 +5,14 @@
     {
       "key": "backend_base_url",
       "value": "http://localhost:8001",
-      "description": "Backend API base URL",
+      "description": "Backend API base URL (Persistence Service)",
       "type": "default",
       "enabled": true
     },
     {
       "key": "ai_service_url",
       "value": "http://localhost:8000",
-      "description": "AI service base URL",
+      "description": "AI service base URL (Entry Point)",
       "type": "default",
       "enabled": true
     },
