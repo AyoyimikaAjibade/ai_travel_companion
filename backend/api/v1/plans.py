@@ -36,6 +36,12 @@ def get_chat_plans(
             detail="Chat not found"
         )
     
+    # Check if user owns the chat (anonymous chats have user_id=None and can't be accessed)
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
     if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -64,7 +70,17 @@ def get_plan(
     
     # Verify user owns the chat this plan belongs to
     chat = chat_service.get_by_id(db, plan.chat_id)
-    if not chat or chat.user_id != current_user.id:
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found"
+        )
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
+    if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
@@ -91,7 +107,17 @@ def delete_plan(
     
     # Verify user owns the chat this plan belongs to
     chat = chat_service.get_by_id(db, plan.chat_id)
-    if not chat or chat.user_id != current_user.id:
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found"
+        )
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
+    if chat.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"

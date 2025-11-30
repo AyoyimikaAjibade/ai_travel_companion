@@ -219,7 +219,6 @@ def _create_chat_from_slots(
     
     # Only create chat if we have essential information
     if not (destination_code and start_date_str and end_date_str):
-        logger.debug("Insufficient data to create chat record")
         return None
     
     try:
@@ -253,8 +252,6 @@ def _create_chat_from_slots(
         )
         
         chat = chat_service.create_chat(db, user_id, chat_create)
-        user_info = f"user {user_id}" if user_id else "anonymous user"
-        logger.info(f"Created chat {chat.id} for {user_info}")
         return chat.id
     
     except (ValueError, KeyError, TypeError) as e:
@@ -311,95 +308,10 @@ def _persist_chat_messages(
                 ai_response_data=ai_response,
             ),
         )
-        
-        logger.debug(f"Persisted messages for chat {chat_id}")
     
     except Exception as e:
         logger.error(f"Error persisting chat messages: {e}", exc_info=True)
         # Don't raise - message persistence failure shouldn't break the flow
-
-
-def _get_latest_plan_for_slot(
-    db: Session, plan_service: PlanService, chat_id: UUID, slot_id: str
-) -> Optional[Dict[str, Any]]:
-    """
-    Get the most recent plan for a chat/slot_id to preserve previous plan data.
-    
-    Args:
-        db: Database session
-        plan_service: Plan service instance
-        chat_id: Chat ID
-        slot_id: Slot ID
-    
-    Returns:
-        Latest plan data as dict, or None if no plan exists
-    """
-    try:
-        plans = plan_service.get_chat_plans(db, chat_id, skip=0, limit=1)
-        if plans:
-            latest_plan = plans[0]
-            return {
-                "flight_data": latest_plan.flight_data,
-                "hotel_data": latest_plan.hotel_data,
-                "car_data": latest_plan.car_data,
-                "attractions_data": latest_plan.attractions_data,
-            }
-    except Exception as e:
-        logger.warning(f"Could not retrieve latest plan: {e}")
-    
-    return None
-
-
-def _merge_plan_data(
-    previous_plan: Optional[Dict[str, Any]], ai_response: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Merge previous plan data with new AI response data.
-    Preserves previous data when new data is missing.
-    
-    Args:
-        previous_plan: Previous plan data (flight, hotel, car, attractions)
-        ai_response: New AI service response
-    
-    Returns:
-        Merged plan components
-    """
-    # Extract new components from AI response
-    new_flight = ai_response.get("flight")
-    new_hotel = ai_response.get("hotel")
-    new_car = ai_response.get("car")
-    new_attractions = ai_response.get("attractions") or []
-    
-    # Use previous data if new data is missing
-    flight = new_flight if new_flight else (previous_plan.get("flight_data") if previous_plan else None)
-    hotel = new_hotel if new_hotel else (previous_plan.get("hotel_data") if previous_plan else None)
-    car = new_car if new_car else (previous_plan.get("car_data") if previous_plan else None)
-    
-    # Merge attractions: combine previous and new, avoiding duplicates
-    previous_attractions = previous_plan.get("attractions_data") if previous_plan else None
-    if isinstance(previous_attractions, dict) and "items" in previous_attractions:
-        # Previous format: {"items": [...]}
-        prev_attrs = previous_attractions.get("items", [])
-    elif isinstance(previous_attractions, list):
-        # Previous format: [...]
-        prev_attrs = previous_attractions
-    else:
-        prev_attrs = []
-    
-    # Combine attractions, avoiding duplicates by name
-    seen_names = {attr.get("name") for attr in prev_attrs if isinstance(attr, dict)}
-    merged_attractions = list(prev_attrs)
-    for attr in new_attractions:
-        if isinstance(attr, dict) and attr.get("name") not in seen_names:
-            merged_attractions.append(attr)
-            seen_names.add(attr.get("name"))
-    
-    return {
-        "flight": flight or {},
-        "hotel": hotel or {},
-        "car": car or {},
-        "attractions": merged_attractions,
-    }
 
 
 def _create_plan_from_ai_response(
@@ -411,8 +323,8 @@ def _create_plan_from_ai_response(
     returned_slots: Dict[str, Any],
 ) -> None:
     """
-    Create a Plan record from AI service TravelOptionsResponse.
-    Merges with previous plan data if available to preserve flight/hotel/car data.
+    Create a new Plan record from AI service TravelOptionsResponse.
+    Always creates a new plan (tracks multiple plans per chat when slots/messages change).
     
     Args:
         db: Database session
@@ -423,44 +335,36 @@ def _create_plan_from_ai_response(
         returned_slots: Slots from AI response (for date calculation)
     """
     try:
-        # Get previous plan data to preserve flight/hotel/car if AI only searched for new items
-        previous_plan = _get_latest_plan_for_slot(db, plan_service, chat_id, slot_id)
-        
-        # Merge previous plan data with new AI response
-        merged_components = _merge_plan_data(previous_plan, ai_response)
-        
-        flight = merged_components["flight"]
-        hotel = merged_components["hotel"]
-        car = merged_components["car"]
-        attractions = merged_components["attractions"]
+        # Extract plan components directly from AI response (don't merge with previous)
+        flight = ai_response.get("flight")
+        hotel = ai_response.get("hotel")
+        car = ai_response.get("car")
+        attractions = ai_response.get("attractions") or []
         
         # Get dates for car price calculation
-        # Try to get dates from returned_slots (ParseResponse) or reconstruct from request
         dates = returned_slots.get("dates", {})
         start_date_str = dates.get("start")
         end_date_str = dates.get("end")
         
-        # If dates not in returned_slots (TravelOptionsResponse), try to extract from flight data
-        if not start_date_str and ai_response.get("flight"):
-            flight_departure = ai_response.get("flight", {}).get("departure_time")
+        # If dates not in returned_slots, try to extract from flight data
+        if not start_date_str and flight:
+            flight_departure = flight.get("departure_time")
             if flight_departure:
                 try:
-                    # Extract date from ISO datetime string
                     dt = datetime.fromisoformat(flight_departure.replace('Z', '+00:00'))
                     start_date_str = dt.strftime("%Y-%m-%d")
                 except Exception:
                     pass
         
-        # Calculate total price
+        # Calculate total price from current plan components
         total_price = _calculate_plan_total_price(
-            flight, hotel, car, attractions, start_date_str, end_date_str
+            flight or {}, hotel or {}, car or {}, attractions, start_date_str, end_date_str
         )
         
         # Convert attractions list to dict format for Plan model
-        # Plan model expects Dict[str, Any], so we store as {"items": [...]}
         attractions_data = {"items": attractions} if attractions else None
         
-        # Create plan payload
+        # Create new plan payload (always create new plan, don't merge)
         plan_payload = {
             "total_price": total_price,
             "score": None,
@@ -468,7 +372,7 @@ def _create_plan_from_ai_response(
             "flight_data": flight if flight else None,
             "hotel_data": hotel if hotel else None,
             "car_data": car if car else None,
-            "attractions_data": attractions_data,  # Now a dict, not a list
+            "attractions_data": attractions_data,
             "deeplinks": {"ai_plan_id": ai_response.get("plan_id")},
             "ai_generated": True,
             "manual": False,
@@ -481,9 +385,8 @@ def _create_plan_from_ai_response(
             logger.warning(f"Could not calculate plan score: {e}")
             plan_payload["score"] = None
         
-        # Persist plan
+        # Create new plan (always creates, tracks multiple plans per chat)
         plan_service.confirm_plan(db, chat_id, slot_id, plan_payload)
-        logger.info(f"Created plan for chat {chat_id} with plan_id {ai_response.get('plan_id')}")
     
     except Exception as e:
         logger.error(f"Error creating plan from AI response: {e}", exc_info=True)
@@ -507,15 +410,17 @@ async def persist_chat_data(
     """
     Persist chat data endpoint - called by AI service after generating response.
     
-    This endpoint allows the AI service to persist chat, messages, and plans
-    to the database after processing a user request.
+    This endpoint handles:
+    - Finding or creating chat by slot_id (if same slot_id exists, update it)
+    - Persisting messages for the chat
+    - Creating new plans when travel plan changes (tracks multiple plans per chat)
     
     Request body:
-    - user_id: UUID (optional) - User ID if authenticated
-    - chat_id: UUID (optional) - Existing chat ID
+    - user_id: UUID (optional) - User ID from request
+    - chat_id: UUID (optional) - Existing chat ID (will be overridden by slot_id lookup)
     - current_slots: dict (optional) - Original current_slots from request
     - returned_slots: dict (required) - Slots from AI response
-    - slot_id: str (required) - Final slot_id
+    - slot_id: str (required) - Slot ID (primary identifier for chat lookup)
     - message: str (required) - User's message
     - ai_response: dict (required) - Full AI service response
     - is_complete_plan: bool (required) - Whether this is a complete plan response
@@ -524,10 +429,7 @@ async def persist_chat_data(
         Success response with persisted data IDs
     """
     try:
-        # Extract parameters from request
-        user_id_str = request_data.get("user_id")
-        chat_id_str = request_data.get("chat_id")
-        current_slots = request_data.get("current_slots")
+        # Extract and validate required parameters
         returned_slots = request_data.get("returned_slots", {})
         slot_id = request_data.get("slot_id")
         message = request_data.get("message")
@@ -540,117 +442,114 @@ async def persist_chat_data(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="returned_slots is required"
             )
-        
         if not slot_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="slot_id is required"
             )
-        
         if not message:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="message is required"
             )
-        
         if not ai_response:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="ai_response is required"
             )
         
-        # Parse user_id and chat_id if provided
+        # Extract user_id: prioritize request body, fallback to authenticated user
         user_id = None
+        user_id_str = request_data.get("user_id")
         if user_id_str:
             try:
                 user_id = UUID(str(user_id_str))
             except (ValueError, TypeError):
-                logger.warning(f"Invalid user_id format: {user_id_str}")
-                # If provided user_id is invalid, try to use current_user
-                user_id = current_user.id if current_user else None
+                pass
         
-        # If no user_id in request but we have authenticated user, use it
+        # Use authenticated user if user_id not in request
         if not user_id and current_user:
             user_id = current_user.id
         
-        chat_id = None
-        if chat_id_str:
-            try:
-                chat_id = UUID(str(chat_id_str))
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid chat_id format: {chat_id_str}")
-                chat_id = None
+        # Find existing chat by slot_id (primary lookup method)
+        # If slot_id matches, we update existing chat instead of creating new one
+        chat = chat_service.get_chat_by_slot_id(db, slot_id)
         
-        # Validate chat ownership if chat_id provided
-        if chat_id and user_id:
-            chat = chat_service.get_by_id(db, chat_id)
-            if chat and chat.user_id and chat.user_id != user_id:
+        # If chat found by slot_id, validate and handle ownership
+        if chat:
+            # If both chat and request have user_id, they must match
+            if chat.user_id and user_id and chat.user_id != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Chat does not belong to this user"
                 )
+            # If chat has no user_id but request has user_id, we'll update chat with user_id (upgrade anonymous to authenticated)
+            # If chat has user_id but request doesn't, we'll allow update but keep existing user_id
         
-        # Get or create chat record
-        chat = None
-        final_chat_id = chat_id
+        # If no chat found by slot_id, try by chat_id if provided
+        chat_id_str = request_data.get("chat_id")
+        if not chat and chat_id_str:
+            try:
+                chat_id = UUID(str(chat_id_str))
+                chat = chat_service.get_by_id(db, chat_id)
+                # Validate ownership
+                if chat:
+                    if chat.user_id and user_id and chat.user_id != user_id:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Chat does not belong to this user"
+                        )
+            except (ValueError, TypeError):
+                pass
         
-        if chat_id:
-            chat = chat_service.get_by_id(db, chat_id)
+        # Prepare slots data for chat update/creation
+        slots_for_chat = returned_slots if returned_slots else request_data.get("current_slots", {})
+        if slot_id and isinstance(slots_for_chat, dict):
+            slots_for_chat["slot_id"] = slot_id
         
-        # Update existing chat with latest data from current_slots
+        # Update existing chat or create new one
+        final_chat_id = None
         if chat:
-            # Determine which current_slots to use
-            if is_complete_plan:
-                slots_for_update = current_slots if current_slots else {}
+            # Update existing chat with latest slot data (same slot_id = update, don't recreate)
+            chat_fields = _extract_chat_fields_from_slots(slots_for_chat)
+            if chat_fields:
+                from models.chat import ChatUpdate
+                chat_update = ChatUpdate(**chat_fields)
+                updated_chat = chat_service.update_chat(db, chat.id, chat_update)
+                final_chat_id = updated_chat.id if updated_chat else chat.id
             else:
-                slots_for_update = returned_slots if returned_slots else {}
+                final_chat_id = chat.id
             
-            # Ensure slot_id is in slots_for_update if we have it
-            if slot_id and slots_for_update and isinstance(slots_for_update, dict):
-                slots_for_update["slot_id"] = slot_id
-            
-            # Extract individual fields from current_slots and update chat
-            if slots_for_update:
-                chat_fields = _extract_chat_fields_from_slots(slots_for_update)
-                if chat_fields:
-                    from models.chat import ChatUpdate
-                    chat_update = ChatUpdate(**chat_fields)
-                    chat = chat_service.update_chat(db, chat_id, chat_update)
-                    logger.info(f"Updated chat {chat_id} with fields from current_slots")
-        
-        # Create chat if it doesn't exist and we have minimum required data
-        if not chat:
-            if is_complete_plan:
-                slots_for_chat = current_slots if current_slots else {}
-                if not slots_for_chat and slot_id:
-                    slots_for_chat = {"slot_id": slot_id}
-            else:
-                slots_for_chat = returned_slots if returned_slots else {}
-            
-            if slot_id and slots_for_chat and isinstance(slots_for_chat, dict):
-                slots_for_chat["slot_id"] = slot_id
-            
+            # Upgrade anonymous chat to authenticated if user_id provided
+            if not chat.user_id and user_id:
+                try:
+                    chat.user_id = user_id
+                    db.commit()
+                    db.refresh(chat)
+                    final_chat_id = chat.id
+                except Exception as e:
+                    logger.warning(f"Could not upgrade anonymous chat to authenticated: {e}")
+        else:
+            # Create new chat if we have minimum required data
             final_chat_id = _create_chat_from_slots(
                 db, chat_service, user_id, slots_for_chat, slot_id
             )
-            
-            if final_chat_id:
-                logger.info(f"Created chat {final_chat_id} for {'user ' + str(user_id) if user_id else 'anonymous user'}")
         
-        # Persist messages if we have chat_id and slot_id
+        # Persist messages and plans if we have a valid chat_id
         persisted_plan_id = None
-        if final_chat_id and slot_id:
+        if final_chat_id:
+            # Persist user message and AI reply
             _persist_chat_messages(
                 db, chat_message_service, final_chat_id, slot_id, message, ai_response
             )
             
-            # Create plan if AI service returned a complete travel plan
-            if ai_response.get("plan_id"):
+            # Create new plan if this is a complete plan response
+            # Each plan change creates a new plan record (tracks multiple plans per chat)
+            if is_complete_plan and ai_response.get("plan_id"):
                 _create_plan_from_ai_response(
                     db, plan_service, final_chat_id, slot_id, ai_response, returned_slots
                 )
                 persisted_plan_id = ai_response.get("plan_id")
-                logger.info(f"Created plan for chat {final_chat_id}")
         
         return {
             "success": True,

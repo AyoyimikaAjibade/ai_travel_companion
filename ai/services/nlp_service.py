@@ -9,7 +9,6 @@ from base_models import Slots
 from .config import GEMINI_KEY
 
 def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:    
-    print(f"✅ Loaded Gemini Key: {'Yes' if GEMINI_KEY else 'No'}")
     current_date = datetime.now().strftime("%Y-%m-%d")
     
     # Convert current_slots to JSON format for better parsing
@@ -18,9 +17,8 @@ def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:
         try:
             current_slots_dict = current_slots.model_dump(mode='json', exclude_none=False)
             current_slots_json = json.dumps(current_slots_dict, indent=2)
-        except Exception as e:
-            print(f"Error converting current_slots to JSON: {e}")
-            current_slots_json = str(current_slots)
+        except Exception:
+            current_slots_json = "{}"
 
     prompt = (
         "You are a travel-NLU extractor. Return EXACTLY ONE JSON with keys "
@@ -141,14 +139,6 @@ def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:
         
         return json.loads(raw_json_string)
 
-    except Exception as e:
-        print("\n--- 🔴 GEMINI PARSE ERROR 🔴 ---")
-        
-        if 'response' in locals() and hasattr(response,'text'):
-            print("--- RAW API RESPONSE FROM GOOGLE ---")
-            print(response.text)
-            print("------------------------------------")
-       
-        traceback.print_exc()
+    except Exception:
         # Return an empty structure on failure
         return {"slots": {}, "missing": [], "reply": {}}

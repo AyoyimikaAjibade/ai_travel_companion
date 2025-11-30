@@ -86,10 +86,14 @@ class ChatRepository(BaseRepository[Chat]):
     
     def update_chat_status(self, db: Session, chat_id: UUID, status: str) -> Optional[Chat]:
         """Update chat status."""
-        chat = self.get_by_id(db, chat_id)
-        if chat:
-            chat.status = status
-            db.commit()
-            db.refresh(chat)
-        return chat
+        try:
+            chat = self.get_by_id(db, chat_id)
+            if chat:
+                chat.status = status
+                db.commit()
+                db.refresh(chat)
+            return chat
+        except Exception:
+            db.rollback()
+            return None
 

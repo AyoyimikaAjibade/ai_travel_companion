@@ -135,7 +135,6 @@ def _search_plan_components(
     car_opt: Optional[CarOption] = None
     attractions_opts: List[AttractionOption] = []
 
-    print(f"\n{slots}\n")
     # Flights
     try:
         flights = amadeus_search_flights(slots)
@@ -149,10 +148,8 @@ def _search_plan_components(
                 selected_total = dict(selected)
                 selected_total["price"] = total_price
                 flight_opt = FlightOption(**selected_total)
-    except Exception as e:
-        print("packages: flight search error", repr(e))
-
-    print(f"\nPACKAGES: The selected FLIGHT option: {flight_opt}\n")
+    except Exception:
+        pass  # Flight search failed
 
     # Hotels
     try:
@@ -162,10 +159,8 @@ def _search_plan_components(
             selected_hotel = pick_near_target(hotels, "total_price", target_hotel_budget)
             if selected_hotel:
                 hotel_opt = HotelOption(**selected_hotel)
-    except Exception as e:
-        print("packages: hotel search error", repr(e))
-
-    print(f"PACKAGES: The selected HOTEL option: {hotel_opt}\n")
+    except Exception:
+        pass  # Hotel search failed
 
     # Attractions
     try:

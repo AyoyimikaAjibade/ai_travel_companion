@@ -28,7 +28,7 @@ class Settings:
     # CORS - Parse from environment or use defaults
     @property
     def BACKEND_CORS_ORIGINS(self) -> List[str]:
-        cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000,http://localhost:8001")
+        cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000,http://backend:8001,http://localhost:8001")
         return [origin.strip() for origin in cors_origins.split(",")]
     
     # Database
@@ -37,21 +37,7 @@ class Settings:
         "postgresql://ayoyimikaajibade:postgres@localhost/twos_db"
     )
     
-    # Email settings (for password reset, notifications, etc.)
-    SMTP_TLS: bool = os.getenv("SMTP_TLS", "true").lower() == "true"
-    SMTP_PORT: Optional[int] = int(os.getenv("SMTP_PORT", "587")) if os.getenv("SMTP_PORT") else None
-    SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER")
-    SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
-    EMAILS_FROM_EMAIL: Optional[str] = os.getenv("EMAILS_FROM_EMAIL")
-    EMAILS_FROM_NAME: Optional[str] = os.getenv("EMAILS_FROM_NAME", "AI Travel Companion")
-    
-    # External APIs
-    GOOGLE_MAPS_API_KEY: Optional[str] = os.getenv("GOOGLE_MAPS_API_KEY")
-    WEATHER_API_KEY: Optional[str] = os.getenv("WEATHER_API_KEY")
-    
     # AI/ML settings
-    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     
     # File storage

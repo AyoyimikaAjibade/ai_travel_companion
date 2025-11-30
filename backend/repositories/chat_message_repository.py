@@ -37,7 +37,7 @@ class ChatMessageRepository(BaseRepository[ChatMessage]):
         ).order_by(ChatMessage.created_at.desc()).offset(skip).limit(limit).all()
     
     def bulk_create_messages(self, db: Session, messages: List[dict]) -> List[ChatMessage]:
-        """Bulk create chat messages."""
+        """Bulk create chat messages with transaction handling."""
         if not messages:
             return []
         
@@ -52,10 +52,14 @@ class ChatMessageRepository(BaseRepository[ChatMessage]):
                 logging.error(f"Error creating chat message: {e}, data: {msg_data}")
         
         if chat_messages:
-            db.add_all(chat_messages)
-            db.commit()
-            for msg in chat_messages:
-                db.refresh(msg)
+            try:
+                db.add_all(chat_messages)
+                db.commit()
+                for msg in chat_messages:
+                    db.refresh(msg)
+            except Exception:
+                db.rollback()
+                return []
         
         return chat_messages
 

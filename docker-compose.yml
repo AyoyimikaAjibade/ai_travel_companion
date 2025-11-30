@@ -33,7 +33,7 @@ services:
       AMADEUS_API_KEY: ${AMADEUS_API_KEY}
       AMADEUS_API_SECRET: ${AMADEUS_API_SECRET}
       # Backend Service URL for persistence
-      BACKEND_SERVICE_BASE_URL: ${BACKEND_SERVICE_BASE_URL:-http://backend:8000}
+      BACKEND_SERVICE_BASE_URL: ${BACKEND_SERVICE_BASE_URL:-http://backend:8001}
     networks:
       - ai_travel_network
     restart: unless-stopped
@@ -73,17 +73,6 @@ services:
       
       # External APIs
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
-      WEATHER_API_KEY: ${WEATHER_API_KEY}
-      
-      # Email (optional)
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_TLS: ${SMTP_TLS:-true}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL}
-      EMAILS_FROM_NAME: ${EMAILS_FROM_NAME:-AI Travel Companion}
       
       # File Upload
       UPLOAD_FOLDER: uploads
@@ -105,7 +94,7 @@ services:
     networks:
       - ai_travel_network
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health')"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/api/v1/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

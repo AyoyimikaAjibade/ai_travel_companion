@@ -17,8 +17,10 @@ class PlanRepository(BaseRepository[Plan]):
         super().__init__(Plan)
     
     def get_chat_plans(self, db: Session, chat_id: UUID, skip: int = 0, limit: int = 100) -> List[Plan]:
-        """Get all plans for a specific chat."""
-        return db.query(Plan).filter(Plan.chat_id == chat_id).offset(skip).limit(limit).all()
+        """Get all plans for a specific chat, ordered by creation time (newest first)."""
+        return db.query(Plan).filter(
+            Plan.chat_id == chat_id
+        ).order_by(Plan.created_at.desc()).offset(skip).limit(limit).all()
     
     def get_plans_by_score_range(self, db: Session, min_score: float, max_score: float, skip: int = 0, limit: int = 100) -> List[Plan]:
         """Get plans within a score range."""
@@ -35,30 +37,37 @@ class PlanRepository(BaseRepository[Plan]):
         ).offset(skip).limit(limit).all()
     
     def get_best_plans_for_chat(self, db: Session, chat_id: UUID, limit: int = 5) -> List[Plan]:
-        """Get best plans for a chat ordered by score."""
-        return db.query(Plan).filter(Plan.chat_id == chat_id).order_by(
-            Plan.score.desc()
+        """Get best plans for a chat ordered by score (descending), then by creation time."""
+        return db.query(Plan).filter(
+            Plan.chat_id == chat_id,
+            Plan.score.isnot(None)
+        ).order_by(
+            Plan.score.desc(),
+            Plan.created_at.desc()
         ).limit(limit).all()
     
     def get_cheapest_plans_for_chat(self, db: Session, chat_id: UUID, limit: int = 5) -> List[Plan]:
-        """Get cheapest plans for a chat ordered by price."""
-        return db.query(Plan).filter(Plan.chat_id == chat_id).order_by(
-            Plan.total_price.asc()
+        """Get cheapest plans for a chat ordered by price (ascending), then by creation time."""
+        return db.query(Plan).filter(
+            Plan.chat_id == chat_id
+        ).order_by(
+            Plan.total_price.asc(),
+            Plan.created_at.desc()
         ).limit(limit).all()
     
     def get_ai_generated_plans(self, db: Session, chat_id: UUID, skip: int = 0, limit: int = 100) -> List[Plan]:
-        """Get AI-generated plans for a chat."""
+        """Get AI-generated plans for a chat, ordered by creation time (newest first)."""
         return db.query(Plan).filter(
             Plan.chat_id == chat_id,
             Plan.ai_generated == True
-        ).offset(skip).limit(limit).all()
+        ).order_by(Plan.created_at.desc()).offset(skip).limit(limit).all()
     
     def get_manual_plans(self, db: Session, chat_id: UUID, skip: int = 0, limit: int = 100) -> List[Plan]:
-        """Get manually created plans for a chat."""
+        """Get manually created plans for a chat, ordered by creation time (newest first)."""
         return db.query(Plan).filter(
             Plan.chat_id == chat_id,
             Plan.manual == True
-        ).offset(skip).limit(limit).all()
+        ).order_by(Plan.created_at.desc()).offset(skip).limit(limit).all()
     
     def search_plans(self, db: Session, search_params: dict, skip: int = 0, limit: int = 100) -> List[Plan]:
         """Search plans with various filters."""
@@ -94,17 +103,25 @@ class PlanRepository(BaseRepository[Plan]):
         if 'manual' in search_params:
             query = query.filter(Plan.manual == search_params['manual'])
         
-        # Order by score by default
-        query = query.order_by(Plan.score.desc())
+        # Order by score (descending) with NULLs last, then by creation time
+        from sqlalchemy import nullslast
+        query = query.order_by(
+            nullslast(Plan.score.desc()),
+            Plan.created_at.desc()
+        )
         
         return query.offset(skip).limit(limit).all()
     
     def update_plan_score(self, db: Session, plan_id: UUID, score: float) -> Optional[Plan]:
         """Update plan score."""
-        plan = self.get_by_id(db, plan_id)
-        if plan:
-            plan.score = score
-            db.commit()
-            db.refresh(plan)
-        return plan
+        try:
+            plan = self.get_by_id(db, plan_id)
+            if plan:
+                plan.score = score
+                db.commit()
+                db.refresh(plan)
+            return plan
+        except Exception:
+            db.rollback()
+            return None
 

@@ -19,7 +19,7 @@ class PlanService(BaseService[Plan]):
         super().__init__(self.plan_repository)
     
     def get_chat_plans(self, db: Session, chat_id: UUID, skip: int = 0, limit: int = 100) -> List[Plan]:
-        """Get all plans for a specific chat."""
+        """Get all plans for a specific chat, ordered by creation time (newest first)."""
         return self.plan_repository.get_chat_plans(db, chat_id, skip=skip, limit=limit)
     
     def create_plan(self, db: Session, plan_create: PlanCreate) -> Plan:
@@ -37,13 +37,22 @@ class PlanService(BaseService[Plan]):
         
         Args:
             db: Database session
-            chat_id: Chat ID this plan belongs to
-            slot_id: Slot ID for tracking (optional, can be empty string)
+            chat_id: Chat ID this plan belongs to (must exist)
+            slot_id: Slot ID for tracking (unused, kept for API compatibility)
             plan_data: Plan data dictionary
         
         Returns:
             Created Plan object
+        
+        Raises:
+            ValueError: If chat_id doesn't exist
         """
+        # Validate chat exists (optional check, can be removed if performance critical)
+        from repositories.chat_repository import ChatRepository
+        chat_repo = ChatRepository()
+        if not chat_repo.get_by_id(db, chat_id):
+            raise ValueError(f"Chat with id {chat_id} does not exist")
+        
         # Create plan from data
         plan_create = PlanCreate(
             chat_id=chat_id,
@@ -156,7 +165,19 @@ class PlanService(BaseService[Plan]):
         return self.plan_repository.search_plans(db, search_params, limit=10)
     
     def compare_plans(self, db: Session, plan_ids: List[UUID]) -> Dict[str, Any]:
-        """Compare multiple plans."""
+        """
+        Compare multiple plans.
+        
+        Args:
+            db: Database session
+            plan_ids: List of plan IDs to compare
+        
+        Returns:
+            Comparison dictionary with plans, price range, score range, features, etc.
+        """
+        if not plan_ids:
+            return {}
+        
         plans = []
         for plan_id in plan_ids:
             plan = self.plan_repository.get_by_id(db, plan_id)
@@ -166,37 +187,55 @@ class PlanService(BaseService[Plan]):
         if not plans:
             return {}
         
+        # Filter out None scores for score range calculation
+        scores = [p.score for p in plans if p.score is not None]
+        
         comparison = {
             'plans': plans,
             'price_range': {
-                'min': min(p.total_price for p in plans),
-                'max': max(p.total_price for p in plans)
+                'min': min(p.total_price for p in plans) if plans else 0,
+                'max': max(p.total_price for p in plans) if plans else 0
             },
             'score_range': {
-                'min': min(p.score for p in plans if p.score),
-                'max': max(p.score for p in plans if p.score)
+                'min': min(scores) if scores else None,
+                'max': max(scores) if scores else None
             },
             'features': {
-                'has_flight': [p.id for p in plans if p.flight_data],
-                'has_hotel': [p.id for p in plans if p.hotel_data],
-                'has_car': [p.id for p in plans if p.car_data],
-                'has_attractions': [p.id for p in plans if p.attractions_data]
+                'has_flight': [str(p.id) for p in plans if p.flight_data],
+                'has_hotel': [str(p.id) for p in plans if p.hotel_data],
+                'has_car': [str(p.id) for p in plans if p.car_data],
+                'has_attractions': [str(p.id) for p in plans if p.attractions_data]
             },
             'generation_types': {
-                'ai_generated': [p.id for p in plans if p.ai_generated],
-                'manual': [p.id for p in plans if p.manual]
+                'ai_generated': [str(p.id) for p in plans if p.ai_generated],
+                'manual': [str(p.id) for p in plans if p.manual]
             }
         }
         
         return comparison
     
-    def bulk_update_plans(self, db: Session, chat_id: UUID, updates: Dict[str, Any]) -> List[Plan]:
-        """Bulk update all plans for a chat."""
+    def bulk_update_plans(self, db: Session, chat_id: UUID, plan_update: PlanUpdate) -> List[Plan]:
+        """
+        Bulk update all plans for a chat.
+        
+        Args:
+            db: Database session
+            chat_id: Chat ID
+            plan_update: PlanUpdate model with fields to update
+        
+        Returns:
+            List of updated plans
+        """
         plans = self.get_chat_plans(db, chat_id)
         updated_plans = []
         
         for plan in plans:
-            updated_plan = self.plan_repository.update(db, plan, updates)
-            updated_plans.append(updated_plan)
+            try:
+                updated_plan = self.plan_repository.update(db, plan, plan_update)
+                if updated_plan:
+                    updated_plans.append(updated_plan)
+            except Exception:
+                # Continue with other plans if one fails
+                continue
         
         return updated_plans
