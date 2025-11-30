@@ -10,10 +10,12 @@
 # -------------------------------------------------------------------
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
 import json, ulid, requests
 from datetime import datetime, timedelta
+import os
 
 from base_models import * 
 from services.nlp_service import call_gemini
@@ -32,6 +34,23 @@ app = FastAPI (
         description="AI-powered Travel planner",
         version="1.0.0"
     )
+
+# Configure CORS - Allow all origins for AI service
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+if cors_origins == "*":
+    allow_origins = ["*"]
+    allow_credentials = False
+else:
+    allow_origins = [origin.strip() for origin in cors_origins.split(",")]
+    allow_credentials = True
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load rental car data once when the app starts
 with open("car_list_mock.json") as f:
