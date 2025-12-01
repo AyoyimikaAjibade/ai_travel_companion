@@ -29,6 +29,7 @@ def _chat_to_current_slots(chat: Chat) -> Dict[str, Any]:
     # Build current_slots in AI service format
     current_slots = {
         'slot_id': chat_dict.get('slot_id'),
+        'chat_id': chat_dict.get('id'),
         'origin_airport_code': chat_dict.get('origin_code'),
         'destination_airport_code': chat_dict.get('destination_code'),
         'destination_city_name': chat_dict.get('destination_city_name'),

@@ -1,7 +1,3 @@
-"""
-Plan management API endpoints.
-"""
-
 from typing import List, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -26,9 +22,7 @@ def get_chat_plans(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """Get all plans for a specific chat."""
-    # Verify chat exists and user owns it
+    ) -> Any:
     chat = chat_service.get_by_id(db, chat_id)
     if not chat:
         raise HTTPException(
@@ -36,7 +30,6 @@ def get_chat_plans(
             detail="Chat not found"
         )
     
-    # Check if user owns the chat (anonymous chats have user_id=None and can't be accessed)
     if chat.user_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -59,8 +52,7 @@ def get_plan(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """Get a specific plan."""
+    ) -> Any:
     plan = plan_service.get_by_id(db, plan_id)
     if not plan:
         raise HTTPException(
@@ -68,7 +60,6 @@ def get_plan(
             detail="Plan not found"
         )
     
-    # Verify user owns the chat this plan belongs to
     chat = chat_service.get_by_id(db, plan.chat_id)
     if not chat:
         raise HTTPException(
@@ -96,8 +87,7 @@ def delete_plan(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """Delete a plan."""
+    ) -> Any:
     plan = plan_service.get_by_id(db, plan_id)
     if not plan:
         raise HTTPException(
@@ -105,7 +95,6 @@ def delete_plan(
             detail="Plan not found"
         )
     
-    # Verify user owns the chat this plan belongs to
     chat = chat_service.get_by_id(db, plan.chat_id)
     if not chat:
         raise HTTPException(

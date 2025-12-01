@@ -361,18 +361,16 @@ def _create_plan_from_ai_response(
             flight or {}, hotel or {}, car or {}, attractions, start_date_str, end_date_str
         )
         
-        # Convert attractions list to dict format for Plan model
-        attractions_data = {"items": attractions} if attractions else None
+        attractions_payload = {"items": attractions} if attractions else None
         
-        # Create new plan payload (always create new plan, don't merge)
         plan_payload = {
             "total_price": total_price,
             "score": None,
             "explanation": ai_response.get("reply") or "AI-generated travel plan",
-            "flight_data": flight if flight else None,
-            "hotel_data": hotel if hotel else None,
-            "car_data": car if car else None,
-            "attractions_data": attractions_data,
+            "flight": flight if flight else None,
+            "hotel": hotel if hotel else None,
+            "car": car if car else None,
+            "attractions": attractions_payload,
             "deeplinks": {"ai_plan_id": ai_response.get("plan_id")},
             "ai_generated": True,
             "manual": False,
