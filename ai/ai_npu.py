@@ -56,6 +56,16 @@ app.add_middleware(
 with open("car_list_mock.json") as f:
     CARS_DATA = json.load(f)
 
+# Verify environment variables on startup
+from services.config import GEMINI_KEY, AMADEUS_KEY, AMADEUS_SECRET
+print("=" * 50)
+print("AI Service Startup - Environment Check:")
+print(f"GEMINI_API_KEY: {'✅ Set' if GEMINI_KEY else '❌ MISSING'}")
+print(f"AMADEUS_API_KEY: {'✅ Set' if AMADEUS_KEY else '❌ MISSING'}")
+print(f"AMADEUS_API_SECRET: {'✅ Set' if AMADEUS_SECRET else '❌ MISSING'}")
+print(f"BACKEND_SERVICE_BASE_URL: {BACKEND_SERVICE_BASE_URL}")
+print("=" * 50)
+
 
 # ------------------------------
 # Helper Functions
@@ -163,7 +173,7 @@ def chat(
 
     # 2) LLM revise/fill and read parsed fields
     result = call_gemini(request.message, current_slots)
-
+    print(f"========= AI:result: {result}")
     slots_dict = result.get("current_slots", {})
     missing = result.get("missing", [])
     reply = result.get("reply", " ")
@@ -200,7 +210,9 @@ def chat(
 
         if can_search_flights:
             try:
+                print(f"Searching flights: {new_current_slots.origin_airport_code} -> {new_current_slots.destination_airport_code}")
                 flight_results = amadeus_search_flights(new_current_slots)
+                print(f"Flight search returned {len(flight_results) if flight_results else 0} results")
                 if flight_results:
                     target_total = (new_current_slots.budget or 0) * 0.35
                     pax_total = (new_current_slots.pax.adults or 0) + (new_current_slots.pax.kids or 0)
@@ -212,8 +224,11 @@ def chat(
                         selected_total['price'] = total_price
                         flight = FlightOption(**selected_total)
                         flight_total_price = total_price
-            except Exception:
-                pass  # Flight search failed, continue without flight
+                        print(f"Selected flight: {flight.airline} - ${total_price:.2f}")
+            except Exception as e:
+                print(f"ERROR: Flight search failed: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
 
 
         # --- Hotel Search ---
@@ -227,15 +242,20 @@ def chat(
 
         if can_search_hotels:
             try:
+                print(f"Searching hotels for: {new_current_slots.destination_city_code}")
                 hotel_results = amadeus_search_hotels(new_current_slots)
+                print(f"Hotel search returned {len(hotel_results) if hotel_results else 0} results")
                 if hotel_results:
                     target_hotel_budget = (new_current_slots.budget or 0) * 0.30
                     selected_hotel = pick_near_target(hotel_results, 'total_price', target_hotel_budget)
                     if selected_hotel:
                         hotel = HotelOption(**selected_hotel)
                         hotel_total_price = hotel.total_price
-            except Exception:
-                pass  # Hotel search failed, continue without hotel
+                        print(f"Selected hotel: ${hotel_total_price:.2f}")
+            except Exception as e:
+                print(f"ERROR: Hotel search failed: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
             
 
         # --- Attraction Search ---
@@ -243,9 +263,16 @@ def chat(
         attraction_total_price = 0
 
         if can_search_attractions:
-            attraction_results = amadeus_search_attractions(new_current_slots)
-            if attraction_results:
-                attractions_list = [AttractionOption(**attr) for attr in attraction_results]
+            try:
+                print(f"Searching attractions for: {new_current_slots.destination_city_code}")
+                attraction_results = amadeus_search_attractions(new_current_slots)
+                print(f"Attraction search returned {len(attraction_results) if attraction_results else 0} results")
+                if attraction_results:
+                    attractions_list = [AttractionOption(**attr) for attr in attraction_results]
+            except Exception as e:
+                print(f"ERROR: Attraction search failed: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
     
         # Calculate and normalize attraction prices
         if attractions_list:

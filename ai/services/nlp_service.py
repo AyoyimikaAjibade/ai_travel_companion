@@ -130,8 +130,12 @@ def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:
 
     try:
         assert isinstance(headers, dict), f"headers is {type(headers)} (should be dict)"
+        
+        if not GEMINI_KEY:
+            print("ERROR: GEMINI_API_KEY is not set in environment variables")
+            return {"current_slots": {}, "missing": ["all"], "reply": "API configuration error. Please contact support."}
    
-        response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
+        response = requests.post(GEMINI_API_URL, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
 
         response_data = response.json()
@@ -139,6 +143,18 @@ def call_gemini(user_message: str, current_slots: Optional[Slots]) -> dict:
         
         return json.loads(raw_json_string)
 
-    except Exception:
-        # Return an empty structure on failure
-        return {"slots": {}, "missing": [], "reply": {}}
+    except requests.RequestException as e:
+        print(f"ERROR: Gemini API request failed: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response status: {e.response.status_code}")
+            print(f"Response body: {e.response.text[:500]}")
+        return {"current_slots": {}, "missing": ["all"], "reply": "Unable to process your request. Please try again."}
+    except KeyError as e:
+        print(f"ERROR: Unexpected Gemini API response format: {e}")
+        print(f"Response data: {response_data if 'response_data' in locals() else 'N/A'}")
+        return {"current_slots": {}, "missing": ["all"], "reply": "API response format error. Please try again."}
+    except Exception as e:
+        print(f"ERROR: Unexpected error in call_gemini: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"current_slots": {}, "missing": ["all"], "reply": "An unexpected error occurred. Please try again."}
