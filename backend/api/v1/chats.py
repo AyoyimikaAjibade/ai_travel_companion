@@ -2,21 +2,74 @@
 Chat management API endpoints.
 """
 
-from typing import List, Any
+from typing import List, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from dependencies import get_db, get_chat_service
 from services.chat_service import ChatService
-from models.chat import ChatPublic
+from models.chat import ChatPublic, Chat
 from core.security import get_current_active_user
 from models.user import User
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ChatPublic])
+def _chat_to_current_slots(chat: Chat) -> Dict[str, Any]:
+    """
+    Convert Chat model to current_slots dictionary format matching AI service structure.
+    Maps Chat model fields to current_slots format with nested objects for dates, pax, and hotel.
+    """
+    if hasattr(chat, 'model_dump'):
+        chat_dict = chat.model_dump(exclude_unset=True)
+    else:
+        chat_dict = chat.dict()
+    
+    # Build current_slots in AI service format
+    current_slots = {
+        'slot_id': chat_dict.get('slot_id'),
+        'origin_airport_code': chat_dict.get('origin_code'),
+        'destination_airport_code': chat_dict.get('destination_code'),
+        'destination_city_name': chat_dict.get('destination_city_name'),
+        'destination_city_code': chat_dict.get('destination_city_code'),
+        'dates': {
+            'start': chat_dict.get('start_date').isoformat() if chat_dict.get('start_date') else None,
+            'end': chat_dict.get('end_date').isoformat() if chat_dict.get('end_date') else None
+        },
+        'pax': {
+            'adults': chat_dict.get('adults', 1),
+            'kids': chat_dict.get('kids', 0) if chat_dict.get('kids') is not None else 0
+        },
+        'budget': chat_dict.get('budget'),
+        'hotel': {
+            'request': chat_dict.get('hotel_request'),
+            'amenities': chat_dict.get('hotel_amenities') or [],
+            'rating': chat_dict.get('hotel_rating')
+        },
+        'car': chat_dict.get('car'),
+        'attractions': chat_dict.get('attractions') or []
+    }
+    
+    # Clean up None values - but keep nested structures even if they have None values
+    cleaned = {}
+    for k, v in current_slots.items():
+        if v is not None:
+            if isinstance(v, dict):
+                # Clean nested dict but keep the structure
+                cleaned_nested = {nk: nv for nk, nv in v.items() if nv is not None}
+                if cleaned_nested:  # Only include if has some values
+                    cleaned[k] = cleaned_nested
+            elif isinstance(v, list):
+                # Include list even if empty
+                cleaned[k] = v
+            else:
+                cleaned[k] = v
+    
+    return cleaned
+
+
+@router.get("/")
 def get_user_chats(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
@@ -26,10 +79,10 @@ def get_user_chats(
 ) -> Any:
     """Get all chats for the current user."""
     chats = chat_service.get_user_chats(db, current_user.id, skip=skip, limit=limit)
-    return chats
+    return [{"current_slots": _chat_to_current_slots(chat)} for chat in chats]
 
 
-@router.get("/{chat_id}", response_model=ChatPublic)
+@router.get("/{chat_id}")
 def get_chat(
     chat_id: UUID,
     db: Session = Depends(get_db),
@@ -56,10 +109,10 @@ def get_chat(
             detail="Not enough permissions"
         )
     
-    return chat
+    return {"current_slots": _chat_to_current_slots(chat)}
 
 
-@router.get("/slot/{slot_id}", response_model=ChatPublic)
+@router.get("/slot/{slot_id}")
 def get_chat_by_slot_id(
     slot_id: str,
     db: Session = Depends(get_db),
@@ -86,7 +139,7 @@ def get_chat_by_slot_id(
             detail="Not enough permissions"
         )
     
-    return chat
+    return {"current_slots": _chat_to_current_slots(chat)}
 
 
 @router.delete("/{chat_id}")
