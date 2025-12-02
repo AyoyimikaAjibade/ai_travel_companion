@@ -54,10 +54,9 @@ class Slots(BaseModel):
 
 # User's text(natural language). For example, "SF to Doha Nov 10–15…"
 class ChatRequest(BaseModel):
-    message : str           # {"message": "SF to Doha Nov 10–15…" }
+    message : str
     current_slots : Optional[Slots] = None
-    user_id : Optional[str] = None  # User ID for persistence (optional)
-    chat_id : Optional[str] = None  # Chat ID for persistence (optional)
+    user_id : Optional[str] = None
 
 # Body for response from AI model
 class ParseResponse(BaseModel):

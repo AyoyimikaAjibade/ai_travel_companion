@@ -58,13 +58,6 @@ with open("car_list_mock.json") as f:
 
 # Verify environment variables on startup
 from services.config import GEMINI_KEY, AMADEUS_KEY, AMADEUS_SECRET
-print("=" * 50)
-print("AI Service Startup - Environment Check:")
-print(f"GEMINI_API_KEY: {'✅ Set' if GEMINI_KEY else '❌ MISSING'}")
-print(f"AMADEUS_API_KEY: {'✅ Set' if AMADEUS_KEY else '❌ MISSING'}")
-print(f"AMADEUS_API_SECRET: {'✅ Set' if AMADEUS_SECRET else '❌ MISSING'}")
-print(f"BACKEND_SERVICE_BASE_URL: {BACKEND_SERVICE_BASE_URL}")
-print("=" * 50)
 
 
 # ------------------------------
@@ -73,7 +66,6 @@ print("=" * 50)
 
 def _persist_to_backend(
     user_id: Optional[str],
-    chat_id: Optional[str],
     current_slots: Optional[Dict[str, Any]],
     returned_slots: Dict[str, Any],
     slot_id: str,
@@ -81,32 +73,14 @@ def _persist_to_backend(
     ai_response: Dict[str, Any],
     is_complete_plan: bool
 ) -> None:
-    """
-    Call backend service to persist chat data.
-    This runs in the background and doesn't block the response.
-    
-    Args:
-        user_id: User ID (optional)
-        chat_id: Chat ID (optional)
-        current_slots: Original current_slots from request
-        returned_slots: Slots from AI response
-        slot_id: Final slot_id
-        message: User's message
-        ai_response: AI service response
-        is_complete_plan: Whether this is a complete plan response
-    """
     try:
-        # Convert slots to dict if they're Pydantic models
         if hasattr(current_slots, 'model_dump'):
             current_slots = current_slots.model_dump(mode='json', exclude_none=True)
         if hasattr(returned_slots, 'model_dump'):
             returned_slots = returned_slots.model_dump(mode='json', exclude_none=True)
         
-        # Prepare persistence payload with user_id included
-        # user_id will be set if authenticated, otherwise None (anonymous)
         persist_payload = {
-            "user_id": user_id,  # Always included - None for anonymous, UUID string for authenticated
-            "chat_id": chat_id,
+            "user_id": user_id,
             "current_slots": current_slots,
             "returned_slots": returned_slots,
             "slot_id": slot_id,
@@ -115,22 +89,16 @@ def _persist_to_backend(
             "is_complete_plan": is_complete_plan
         }
         
-        # Call backend persistence endpoint - include /ai prefix since router is mounted at /ai
         backend_url = f"{BACKEND_SERVICE_BASE_URL}/api/v1/ai/persist-chat"
         
         response = requests.post(
             backend_url,
             json=persist_payload,
-            timeout=30.0,  # Increased timeout for database operations
+            timeout=30.0,
             headers={"Content-Type": "application/json"}
         )
-        
-        # Silently handle errors - persistence is non-critical
-        if response.status_code != 200:
-            pass  # Log to error monitoring in production
     
     except Exception:
-        # Silently fail - persistence is non-critical and shouldn't block responses
         pass
 
 
@@ -173,7 +141,6 @@ def chat(
 
     # 2) LLM revise/fill and read parsed fields
     result = call_gemini(request.message, current_slots)
-    print(f"========= AI:result: {result}")
     slots_dict = result.get("current_slots", {})
     missing = result.get("missing", [])
     reply = result.get("reply", " ")
@@ -251,7 +218,7 @@ def chat(
                     if selected_hotel:
                         hotel = HotelOption(**selected_hotel)
                         hotel_total_price = hotel.total_price
-                        print(f"Selected hotel: ${hotel_total_price:.2f}")
+                        print(f"Selected hotel: {hotel.name} - ${hotel_total_price:.2f}")
             except Exception as e:
                 print(f"ERROR: Hotel search failed: {type(e).__name__}: {e}")
                 import traceback
@@ -264,7 +231,6 @@ def chat(
 
         if can_search_attractions:
             try:
-                print(f"Searching attractions for: {new_current_slots.destination_city_code}")
                 attraction_results = amadeus_search_attractions(new_current_slots)
                 print(f"Attraction search returned {len(attraction_results) if attraction_results else 0} results")
                 if attraction_results:
@@ -273,6 +239,8 @@ def chat(
                 print(f"ERROR: Attraction search failed: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
+            else:
+                print(f"No attractions found")  
     
         # Calculate and normalize attraction prices
         if attractions_list:
@@ -344,11 +312,9 @@ def chat(
             reply = reply
         )
         
-        # Call backend to persist data (fire and forget - non-blocking)
         try:
             _persist_to_backend(
                 user_id=request.user_id,
-                chat_id=request.chat_id,
                 current_slots=request.current_slots,
                 returned_slots=new_current_slots.model_dump(mode='json', exclude_none=True),
                 slot_id=final_slot_id,
@@ -357,18 +323,16 @@ def chat(
                 is_complete_plan=True
             )
         except Exception:
-            pass  # Backend persistence failed, non-critical
+            pass
         
         return response
     else:
         # Information is missing - return ParseResponse to ask for clarification
         response = ParseResponse(current_slots=new_current_slots, missing=missing, reply=reply)
         
-        # Call backend to persist data even for incomplete responses (fire and forget)
         try:
             _persist_to_backend(
                 user_id=request.user_id,
-                chat_id=request.chat_id,
                 current_slots=request.current_slots,
                 returned_slots=new_current_slots.model_dump(mode='json', exclude_none=True),
                 slot_id=new_current_slots.slot_id,
@@ -381,7 +345,7 @@ def chat(
                 is_complete_plan=False
             )
         except Exception:
-            pass  # Backend persistence failed, non-critical
+            pass
         
         return response
 

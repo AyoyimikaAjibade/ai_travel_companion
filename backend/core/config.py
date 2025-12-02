@@ -19,7 +19,7 @@ class Settings:
     WORKERS: int = int(os.getenv("WORKERS", "1"))
     
     # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production") #TODO: WHY IS THIS NOT BEING USED?
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", os.getenv("SECRET_KEY", "your-jwt-secret-key"))
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 hours

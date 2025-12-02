@@ -5,91 +5,78 @@
     {
       "key": "backend_base_url",
       "value": "http://localhost:8001",
-      "description": "Backend API base URL (Persistence Service)",
       "type": "default",
       "enabled": true
     },
     {
       "key": "ai_service_url",
       "value": "http://localhost:8000",
-      "description": "AI service base URL (Entry Point)",
       "type": "default",
       "enabled": true
     },
     {
       "key": "api_version",
       "value": "/api/v1",
-      "description": "API version prefix",
       "type": "default",
       "enabled": true
     },
     {
       "key": "full_url",
       "value": "{{backend_base_url}}{{api_version}}",
-      "description": "Complete backend API URL",
       "type": "default",
       "enabled": true
     },
     {
       "key": "access_token",
       "value": "",
-      "description": "JWT Access Token (auto-populated from login)",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "refresh_token",
       "value": "",
-      "description": "JWT Refresh Token (auto-populated from login)",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "user_id",
       "value": "",
-      "description": "Current user ID (auto-populated from registration)",
       "type": "default",
       "enabled": true
     },
     {
       "key": "test_username",
       "value": "testuser",
-      "description": "Test user username",
       "type": "default",
       "enabled": true
     },
     {
       "key": "test_email",
       "value": "testuser@example.com",
-      "description": "Test user email",
       "type": "default",
       "enabled": true
     },
     {
       "key": "test_password",
       "value": "testpass123",
-      "description": "Test user password",
       "type": "default",
       "enabled": true
     },
     {
       "key": "chat_id",
       "value": "",
-      "description": "Current chat ID (auto-populated)",
       "type": "default",
       "enabled": true
     },
     {
       "key": "slot_id",
       "value": "",
-      "description": "AI service slot_id for chat tracking (auto-populated)",
       "type": "default",
       "enabled": true
     },
     {
       "key": "plan_id",
       "value": "",
-      "description": "Current plan ID (auto-populated)",
       "type": "default",
       "enabled": true
     }

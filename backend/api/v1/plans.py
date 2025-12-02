@@ -22,7 +22,7 @@ def get_chat_plans(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-    ) -> Any:
+) -> Any:
     chat = chat_service.get_by_id(db, chat_id)
     if not chat:
         raise HTTPException(
@@ -52,7 +52,7 @@ def get_plan(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-    ) -> Any:
+) -> Any:
     plan = plan_service.get_by_id(db, plan_id)
     if not plan:
         raise HTTPException(
@@ -87,7 +87,7 @@ def delete_plan(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-    ) -> Any:
+) -> Any:
     plan = plan_service.get_by_id(db, plan_id)
     if not plan:
         raise HTTPException(

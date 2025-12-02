@@ -8,7 +8,6 @@ This module handles:
 - Creating Plan records when travel plans are generated
 """
 
-import logging
 from datetime import date, datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
@@ -29,9 +28,6 @@ from models.user import User
 from services.chat_message_service import ChatMessageService
 from services.chat_service import ChatService
 from services.plan_service import PlanService
-
-# Configure logging
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -68,7 +64,7 @@ def _calculate_car_total_price(
         if days > 0:
             return float(price_per_day) * days
     except (ValueError, TypeError) as e:
-        logger.warning(f"Error calculating car total price: {e}")
+        pass
     
     return 0.0
 
@@ -310,7 +306,7 @@ def _persist_chat_messages(
         )
     
     except Exception as e:
-        logger.error(f"Error persisting chat messages: {e}", exc_info=True)
+        pass
         # Don't raise - message persistence failure shouldn't break the flow
 
 
@@ -380,14 +376,14 @@ def _create_plan_from_ai_response(
         try:
             plan_payload["score"] = plan_service.calculate_plan_score(plan_payload)
         except Exception as e:
-            logger.warning(f"Could not calculate plan score: {e}")
+            pass
             plan_payload["score"] = None
         
         # Create new plan (always creates, tracks multiple plans per chat)
         plan_service.confirm_plan(db, chat_id, slot_id, plan_payload)
     
     except Exception as e:
-        logger.error(f"Error creating plan from AI response: {e}", exc_info=True)
+        pass
         # Don't raise - plan creation failure shouldn't break the chat flow
 
 
@@ -405,27 +401,6 @@ async def persist_chat_data(
     plan_service: PlanService = Depends(get_plan_service),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> Dict[str, Any]:
-    """
-    Persist chat data endpoint - called by AI service after generating response.
-    
-    This endpoint handles:
-    - Finding or creating chat by slot_id (if same slot_id exists, update it)
-    - Persisting messages for the chat
-    - Creating new plans when travel plan changes (tracks multiple plans per chat)
-    
-    Request body:
-    - user_id: UUID (optional) - User ID from request
-    - chat_id: UUID (optional) - Existing chat ID (will be overridden by slot_id lookup)
-    - current_slots: dict (optional) - Original current_slots from request
-    - returned_slots: dict (required) - Slots from AI response
-    - slot_id: str (required) - Slot ID (primary identifier for chat lookup)
-    - message: str (required) - User's message
-    - ai_response: dict (required) - Full AI service response
-    - is_complete_plan: bool (required) - Whether this is a complete plan response
-    
-    Returns:
-        Success response with persisted data IDs
-    """
     try:
         # Extract and validate required parameters
         returned_slots = request_data.get("returned_slots", {})
@@ -484,21 +459,6 @@ async def persist_chat_data(
             # If chat has no user_id but request has user_id, we'll update chat with user_id (upgrade anonymous to authenticated)
             # If chat has user_id but request doesn't, we'll allow update but keep existing user_id
         
-        # If no chat found by slot_id, try by chat_id if provided
-        chat_id_str = request_data.get("chat_id")
-        if not chat and chat_id_str:
-            try:
-                chat_id = UUID(str(chat_id_str))
-                chat = chat_service.get_by_id(db, chat_id)
-                # Validate ownership
-                if chat:
-                    if chat.user_id and user_id and chat.user_id != user_id:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Chat does not belong to this user"
-                        )
-            except (ValueError, TypeError):
-                pass
         
         # Prepare slots data for chat update/creation
         slots_for_chat = returned_slots if returned_slots else request_data.get("current_slots", {})
@@ -526,7 +486,7 @@ async def persist_chat_data(
                     db.refresh(chat)
                     final_chat_id = chat.id
                 except Exception as e:
-                    logger.warning(f"Could not upgrade anonymous chat to authenticated: {e}")
+                    pass
         else:
             # Create new chat if we have minimum required data
             final_chat_id = _create_chat_from_slots(
@@ -560,7 +520,7 @@ async def persist_chat_data(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error persisting chat data: {e}", exc_info=True)
+        pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to persist chat data: {str(e)}"

@@ -517,8 +517,7 @@ Frontend → AI Service: POST /chat (Port 8000)
     {
       "message": "From Nov 10 to Nov 20, 2 adults, budget $5k, need hotel and car",
       "current_slots": { "slot_id": "...", ... },
-      "user_id": "optional-uuid",
-      "chat_id": null
+      "user_id": "optional-uuid"
     }
     │
     ▼
@@ -572,10 +571,10 @@ AI Service:
 - AI service preserves `slot_id` across messages (merges slots)
 - **Chat lookup by slot_id**: Backend finds/updates chat by `slot_id` (same `slot_id` = same conversation)
 
-**Chat ID Tracking** (Secondary):
+**Chat ID Tracking** (Internal):
 - Backend generates `chat_id` (UUID) when creating `Chat` record
-- Frontend can send `chat_id` in requests (optional)
 - Backend links `ChatMessage` and `Plan` records to `Chat`
+- Chat lookup is done by `slot_id` - no need to send `chat_id` from frontend
 
 **User ID Tracking** (Optional):
 - Authenticated users can pass `user_id` in chat request

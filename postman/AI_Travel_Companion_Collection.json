@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "AI Travel Companion API",
-    "description": "Clean API collection for AI Travel Companion with automatic token handling",
+    "description": "API collection for AI Travel Companion",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -20,7 +20,6 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// Auto-refresh token if expired",
           "const accessToken = pm.environment.get('access_token');",
           "const refreshToken = pm.environment.get('refresh_token');",
           "",
@@ -30,8 +29,6 @@
           "        const currentTime = Math.floor(Date.now() / 1000);",
           "        ",
           "        if (tokenData.exp < currentTime + 300) {",
-          "            console.log('Token expiring soon, refreshing...');",
-          "            ",
           "            pm.sendRequest({",
           "                url: pm.environment.get('full_url') + '/auth/refresh-token',",
           "                method: 'POST',",
@@ -45,12 +42,13 @@
           "                    const responseData = response.json();",
           "                    pm.environment.set('access_token', responseData.access_token);",
           "                    pm.environment.set('refresh_token', responseData.refresh_token);",
-          "                    console.log('Token refreshed successfully');",
+          "                    if (responseData.user_id) {",
+          "                        pm.environment.set('user_id', responseData.user_id);",
+          "                    }",
           "                }",
           "            });",
           "        }",
           "    } catch (e) {",
-          "        console.log('Error checking token expiration:', e);",
           "    }",
           "}"
         ]
@@ -59,7 +57,7 @@
   ],
   "item": [
     {
-      "name": "🏥 Health Check",
+      "name": "Health Check",
       "item": [
         {
           "name": "Backend Health Check",
@@ -111,7 +109,6 @@
                   "if (pm.response.code === 200) {",
                   "    const responseData = pm.response.json();",
                   "    pm.environment.set('user_id', responseData.id);",
-                  "    console.log('User registered:', responseData.id);",
                   "}"
                 ]
               }
@@ -155,7 +152,9 @@
                   "    const responseData = pm.response.json();",
                   "    pm.environment.set('access_token', responseData.access_token);",
                   "    pm.environment.set('refresh_token', responseData.refresh_token);",
-                  "    console.log('Login successful');",
+                  "    if (responseData.user_id) {",
+                  "        pm.environment.set('user_id', responseData.user_id);",
+                  "    }",
                   "}"
                 ]
               }
@@ -177,7 +176,7 @@
               "urlencoded": [
                 {
                   "key": "username",
-                  "value": "{{test_email}}",
+                  "value": "{{test_username}}",
                   "type": "text"
                 },
                 {
@@ -210,7 +209,9 @@
                   "    const responseData = pm.response.json();",
                   "    pm.environment.set('access_token', responseData.access_token);",
                   "    pm.environment.set('refresh_token', responseData.refresh_token);",
-                  "    console.log('Tokens refreshed');",
+                  "    if (responseData.user_id) {",
+                  "        pm.environment.set('user_id', responseData.user_id);",
+                  "    }",
                   "}"
                 ]
               }
@@ -235,6 +236,63 @@
               "raw": "{{full_url}}/auth/refresh-token",
               "host": ["{{full_url}}"],
               "path": ["auth", "refresh-token"]
+            }
+          }
+        },
+        {
+          "name": "Password Reset Request",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_email}}\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/auth/password-reset-request",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "password-reset-request"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"old_password\",\n  \"new_password\": \"new_password123\"\n}"
+            },
+            "url": {
+              "raw": "{{full_url}}/auth/change-password",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/auth/logout",
+              "host": ["{{full_url}}"],
+              "path": ["auth", "logout"]
             }
           }
         }
@@ -297,14 +355,7 @@
                   "    const responseData = pm.response.json();",
                   "    if (responseData.slot_id) {",
                   "        pm.environment.set('slot_id', responseData.slot_id);",
-                  "        console.log('✅ Slot ID saved:', responseData.slot_id);",
                   "    }",
-                  "    if (responseData.plan_id) {",
-                  "        console.log('✅ Plan generated! Plan ID:', responseData.plan_id);",
-                  "    } else if (responseData.missing && responseData.missing.length > 0) {",
-                  "        console.log('⚠️ Missing fields:', responseData.missing.join(', '));",
-                  "    }",
-                  "    console.log('💬 AI Response:', responseData.reply || 'Response received');",
                   "}"
                 ]
               }
@@ -323,7 +374,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from November 12 to November 21 for 2 adults and 2 kids. I need a rental car during the trip. My budget is $5k\",\n  \"current_slots\": null,\n  \"user_id\": \"{{user_id}}\",\n  \"chat_id\": null\n}"
+              "raw": "{\n  \"message\": \"I want to fly from San Francisco to Paris from December 15 to December 20 for 2 adults and 1 kids. I need a rental car during the trip. My budget is $5k\",\n  \"current_slots\": null,\n  \"user_id\": \"{{user_id}}\"\n}"
             },
             "url": {
               "raw": "{{ai_service_url}}/chat",
@@ -339,6 +390,28 @@
       "item": [
         {
           "name": "Get My Chats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    if (Array.isArray(responseData) && responseData.length > 0) {",
+                  "        const firstChat = responseData[0];",
+                  "        if (firstChat.current_slots && firstChat.current_slots.chat_id) {",
+                  "            pm.environment.set('chat_id', firstChat.current_slots.chat_id);",
+                  "        }",
+                  "        if (firstChat.current_slots && firstChat.current_slots.slot_id) {",
+                  "            pm.environment.set('slot_id', firstChat.current_slots.slot_id);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
@@ -369,11 +442,19 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "    const responseData = pm.response.json();",
-                  "    if (responseData.slot_id) {",
-                  "        pm.environment.set('slot_id', responseData.slot_id);",
+                  "    if (responseData.current_slots) {",
+                  "        if (responseData.current_slots.chat_id) {",
+                  "            pm.environment.set('chat_id', responseData.current_slots.chat_id);",
+                  "        }",
+                  "        if (responseData.current_slots.slot_id) {",
+                  "            pm.environment.set('slot_id', responseData.current_slots.slot_id);",
+                  "        }",
                   "    }",
-                  "    if (responseData.id) {",
-                  "        pm.environment.set('chat_id', responseData.id);",
+                  "    const urlPath = pm.request.url.getPath();",
+                  "    const pathParts = urlPath.split('/').filter(p => p);",
+                  "    const chatIdIndex = pathParts.indexOf('chats') + 1;",
+                  "    if (chatIdIndex > 0 && pathParts[chatIdIndex]) {",
+                  "        pm.environment.set('chat_id', pathParts[chatIdIndex]);",
                   "    }",
                   "}"
                 ]
@@ -392,6 +473,27 @@
         },
         {
           "name": "Get Chat by Slot ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    if (responseData.current_slots) {",
+                  "        if (responseData.current_slots.chat_id) {",
+                  "            pm.environment.set('chat_id', responseData.current_slots.chat_id);",
+                  "        }",
+                  "        if (responseData.current_slots.slot_id) {",
+                  "            pm.environment.set('slot_id', responseData.current_slots.slot_id);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
@@ -461,9 +563,11 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "    const responseData = pm.response.json();",
-                  "    if (responseData.length > 0) {",
-                  "        pm.environment.set('plan_id', responseData[0].id);",
-                  "        console.log('Plan ID saved:', responseData[0].id);",
+                  "    if (Array.isArray(responseData) && responseData.length > 0) {",
+                  "        const firstPlan = responseData[0];",
+                  "        if (firstPlan.plan_id) {",
+                  "            pm.environment.set('plan_id', firstPlan.plan_id);",
+                  "        }",
                   "    }",
                   "}"
                 ]
@@ -492,6 +596,22 @@
         },
         {
           "name": "Get Plan by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    if (responseData.plan_id) {",
+                  "        pm.environment.set('plan_id', responseData.plan_id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],

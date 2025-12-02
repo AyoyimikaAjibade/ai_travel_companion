@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Any
+from uuid import UUID
 from jose import JWTError, jwt
 from pydantic import ValidationError
 
@@ -17,7 +18,8 @@ from schemas.token import Token, TokenCreate, TokenPayload
 from core.security import (
     get_password_hash, verify_password,
     create_access_token, create_refresh_token,
-    get_current_user, get_current_active_user
+    get_current_user, get_current_active_user,
+    SECRET_KEY, ALGORITHM
 )
 from core.config import settings
 
@@ -74,7 +76,7 @@ def login(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -98,15 +100,15 @@ def refresh_token(
     try:
         payload = jwt.decode(
             refresh_token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
         )
         token_data = TokenPayload(**payload)
         
         if token_data.type != "refresh":
             raise credentials_exception
             
-        user = db.query(User).filter(User.id == token_data.sub).first()
+        user = db.query(User).filter(User.id == UUID(token_data.sub)).first()
         if user is None:
             raise credentials_exception
             
@@ -121,7 +123,7 @@ def refresh_token(
             "user_id": str(user.id),
         }
         
-    except (JWTError, ValidationError):
+    except (JWTError, ValidationError, ValueError, TypeError) as e:
         raise credentials_exception
 
 @router.post("/password-reset-request")

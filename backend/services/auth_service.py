@@ -27,9 +27,15 @@ class AuthService(BaseService[User]):
         self.user_repository = UserRepository()
         super().__init__(self.user_repository)
     
-    def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
-        """Authenticate a user with email and password."""
-        user = self.user_repository.get_by_email(db, email)
+    def authenticate_user(self, db: Session, username_or_email: str, password: str) -> Optional[User]:
+        user = None
+        if "@" in username_or_email:
+            user = self.user_repository.get_by_email(db, username_or_email)
+        else:
+            user = self.user_repository.get_by_username(db, username_or_email)
+            if not user:
+                user = self.user_repository.get_by_email(db, username_or_email)
+        
         if not user:
             return None
         if not verify_password(password, user.hashed_password):
@@ -37,7 +43,6 @@ class AuthService(BaseService[User]):
         if not user.is_active:
             return None
         
-        # Update last login
         self.user_repository.update_last_login(db, user.id)
         return user
     
