@@ -13,6 +13,7 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    user_id: str
 
 class TokenPayload(BaseModel):
     """Token payload schema."""

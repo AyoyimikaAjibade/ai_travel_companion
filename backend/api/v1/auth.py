@@ -117,6 +117,8 @@ def refresh_token(
             ),
             "refresh_token": refresh_token,
             "token_type": "bearer",
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user_id": str(user.id),
         }
         
     except (JWTError, ValidationError):
