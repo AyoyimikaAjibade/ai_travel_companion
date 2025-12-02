@@ -74,7 +74,8 @@ class AuthService(BaseService[User]):
             "access_token": create_access_token(user_id, expires_delta=access_token_expires),
             "refresh_token": create_refresh_token(user_id, expires_delta=refresh_token_expires),
             "token_type": "bearer",
-            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user_id": str(user_id),
         }
     
     def verify_user_active(self, db: Session, user_id: UUID) -> bool:

@@ -3,6 +3,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Any
+from jose import JWTError, jwt
+from pydantic import ValidationError
 
 from dependencies import get_db, get_auth_service
 from services.auth_service import AuthService
@@ -11,7 +13,7 @@ from schemas.user import (
     User as UserSchema, UserLogin,
     PasswordResetRequest, ChangePassword
 )
-from schemas.token import Token, TokenCreate
+from schemas.token import Token, TokenCreate, TokenPayload
 from core.security import (
     get_password_hash, verify_password,
     create_access_token, create_refresh_token,
