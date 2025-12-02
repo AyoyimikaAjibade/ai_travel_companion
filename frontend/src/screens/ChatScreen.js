@@ -110,6 +110,8 @@ const QUICK_CHIPS = [
   "4+ star hotels",
 ];
 
+const TYPING_MIN_MS = 1500;
+
 /* ===== Helpers: local NLU & intents ===== */
 const normalize = (s = "") =>
   s.toString().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
@@ -154,6 +156,7 @@ class ChatScreenClass extends React.Component {
       isKeyboardVisible: false,
     };
     this.flatListRef = React.createRef();
+    this.typingStartedAt = null;
     this._localFillAttempts = 0;
     this.currentChatId = null;
     this.isApplyingChat = false;
@@ -172,11 +175,21 @@ class ChatScreenClass extends React.Component {
         this.handleNavigationFocus
       );
     }
-    this.unsubscribeStore = useSavedChatsStore.subscribe(this.handleStoreChange);
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    this.keyboardShowListener = Keyboard.addListener(showEvent, this.handleKeyboardShow);
-    this.keyboardHideListener = Keyboard.addListener(hideEvent, this.handleKeyboardHide);
+    this.unsubscribeStore = useSavedChatsStore.subscribe(
+      this.handleStoreChange
+    );
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    this.keyboardShowListener = Keyboard.addListener(
+      showEvent,
+      this.handleKeyboardShow
+    );
+    this.keyboardHideListener = Keyboard.addListener(
+      hideEvent,
+      this.handleKeyboardHide
+    );
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -235,6 +248,8 @@ class ChatScreenClass extends React.Component {
 
   handleStoreChange(state) {
     if (!this.currentChatId) return;
+    // Don't overwrite local typing indicator while it's showing
+    if (this.state.isTyping) return;
     const chat =
       state.getChatById?.(this.currentChatId) ??
       state.chats?.find?.((c) => c.id === this.currentChatId);
@@ -413,16 +428,14 @@ class ChatScreenClass extends React.Component {
         ? mergeSlots(currentSlots)
         : getDefaultSlots();
 
-    useSavedChatsStore
-      .getState()
-      .updateChatContent(chatId, sanitizedMessages, {
-        sessionId,
-        phase,
-        currentSlots: slotSnapshot,
-        missing,
-        status: chatStatus,
-        booking,
-      });
+    useSavedChatsStore.getState().updateChatContent(chatId, sanitizedMessages, {
+      sessionId,
+      phase,
+      currentSlots: slotSnapshot,
+      missing,
+      status: chatStatus,
+      booking,
+    });
   };
 
   generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -454,9 +467,42 @@ class ChatScreenClass extends React.Component {
   };
 
   removeTypingIndicators = () => {
+    this.typingStartedAt = null;
     this.setState((prev) => ({
       messages: prev.messages.filter((m) => !m.isTyping),
     }));
+  };
+
+  showTypingIndicator = () => {
+    this.typingStartedAt = Date.now();
+    const typingMessage = {
+      id: this.generateId(),
+      role: "bot",
+      isTyping: true,
+      timestamp: new Date(),
+    };
+    this.setState(
+      (prev) => ({
+        isTyping: true,
+        messages: [...prev.messages.filter((m) => !m.isTyping), typingMessage],
+      }),
+      () => this.scrollToEndSmooth()
+    );
+  };
+
+  waitForTypingMinimum = async () => {
+    const elapsed = this.typingStartedAt
+      ? Date.now() - this.typingStartedAt
+      : 0;
+    const remaining = Math.max(0, TYPING_MIN_MS - elapsed);
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
+  };
+
+  clearTypingIndicator = () => {
+    this.removeTypingIndicators();
+    this.setState({ isTyping: false });
   };
 
   sendToServer = async (messageText) => {
@@ -475,16 +521,19 @@ class ChatScreenClass extends React.Component {
   };
 
   // Local handler: greetings and small talk
-  handleLocalIntents = (rawText) => {
+  handleLocalIntents = async (rawText) => {
     const text = (rawText || "").trim();
     if (!text) return false;
 
     // Greetings
     if (isGreeting(text)) {
       this.addMessage({ role: "user", text });
+      this.showTypingIndicator();
       // pick a greeting reply
       const arr = GREETINGS.greetings || GREETINGS;
       const reply = arr[Math.floor(Math.random() * arr.length)];
+      await this.waitForTypingMinimum();
+      this.clearTypingIndicator();
       this.addMessage({ role: "bot", text: reply });
       this.setState({ message: "" });
       return true;
@@ -492,8 +541,11 @@ class ChatScreenClass extends React.Component {
 
     if (isHowAreYou(text)) {
       this.addMessage({ role: "user", text });
+      this.showTypingIndicator();
       const arr = GREETINGS.how_are_you || ["I'm good — ready to help!"];
       const reply = arr[Math.floor(Math.random() * arr.length)];
+      await this.waitForTypingMinimum();
+      this.clearTypingIndicator();
       this.addMessage({ role: "bot", text: reply });
       this.setState({ message: "" });
       return true;
@@ -508,35 +560,34 @@ class ChatScreenClass extends React.Component {
     if (!message || !message.trim() || isTyping) return;
 
     // Try local handling first
-    const handledLocally = this.handleLocalIntents(message);
+    const handledLocally = await this.handleLocalIntents(message);
     if (handledLocally) return;
 
     // else server flow
     Keyboard.dismiss();
     this.addMessage({ role: "user", text: message });
-    this.setState({ message: "", isTyping: true });
-    this.addMessage({ role: "bot", isTyping: true });
+    this.setState({ message: "" }, this.showTypingIndicator);
 
     try {
       const resp = await this.sendToServer(message);
       await this._processServerResponse(resp);
     } catch (err) {
-      this.removeTypingIndicators();
+      await this.waitForTypingMinimum();
+      this.clearTypingIndicator();
       this.addMessage({
         role: "bot",
         text: "Sorry — couldn't reach the server. Check API URL in lib/api.js.",
       });
-      this.setState({ isTyping: false });
     }
   };
 
   // Process server response (same logic as earlier: show reply if present; else show missing prompt)
   _processServerResponse = async (resp) => {
-    this.removeTypingIndicators();
+    await this.waitForTypingMinimum();
+    this.clearTypingIndicator();
 
     const rawSlots =
-      (resp && (resp.current_slots ?? resp.currentSlots ?? resp.slots)) ||
-      null;
+      (resp && (resp.current_slots ?? resp.currentSlots ?? resp.slots)) || null;
     const slotsFromServer =
       rawSlots && typeof rawSlots === "object"
         ? mergeSlots(rawSlots)
@@ -697,7 +748,10 @@ class ChatScreenClass extends React.Component {
                 data={messages}
                 renderItem={this.renderMessage}
                 keyExtractor={(item) => item.id || this.generateId()}
-                extraData={{ booking: this.state.booking, status: this.state.chatStatus }}
+                extraData={{
+                  booking: this.state.booking,
+                  status: this.state.chatStatus,
+                }}
                 style={styles.messagesList}
                 contentContainerStyle={styles.messagesContainer}
                 keyboardShouldPersistTaps="handled"

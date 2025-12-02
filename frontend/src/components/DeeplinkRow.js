@@ -15,7 +15,7 @@ const DeeplinkRow = ({ title, url, icon: Icon }) => {
     try {
       await Linking.openURL(url);
     } catch (error) {
-      console.error("Failed to open URL:", error);
+      // Failed to open the deeplink; noop to avoid noisy console logs
     }
   };
 

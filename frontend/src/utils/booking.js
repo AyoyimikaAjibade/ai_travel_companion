@@ -39,15 +39,6 @@ export const normalizeBookingLedger = (ledger) => {
   }
 
   const next = createEmptyBookingLedger();
-  
-  // Debug: log what we're receiving
-  if (__DEV__ && ledger?.records) {
-    console.log('[normalizeBookingLedger] Input records:', {
-      recordCount: Object.keys(ledger.records || {}).length,
-      recordKeys: Object.keys(ledger.records || {}),
-      firstRecord: ledger.records[Object.keys(ledger.records || {})[0]],
-    });
-  }
 
   if (Array.isArray(ledger)) {
     ledger
@@ -91,23 +82,6 @@ export const normalizeBookingLedger = (ledger) => {
           next.batches[validRecord.batchId] = [...next.batches[validRecord.batchId], validRecord.serviceKey];
         }
       }
-      
-      if (__DEV__) {
-        console.log('[normalizeBookingLedger] Added record directly:', {
-          key,
-          serviceKey: validRecord.serviceKey,
-          serviceType,
-          recordCount: Object.keys(next.records).length,
-        });
-      }
-    } else if (__DEV__) {
-      console.warn('[normalizeBookingLedger] Skipping invalid record:', {
-        key,
-        hasRecord: !!record,
-        recordType: typeof record,
-        hasServiceKey: !!record?.serviceKey,
-        record: record,
-      });
     }
   });
 
@@ -119,16 +93,6 @@ export const normalizeBookingLedger = (ledger) => {
   }
 
   next.lastUpdated = ledger.lastUpdated ?? null;
-  
-  if (__DEV__ && Object.keys(next.records).length !== Object.keys(records).length) {
-    console.warn('[normalizeBookingLedger] Record count mismatch:', {
-      inputCount: Object.keys(records).length,
-      outputCount: Object.keys(next.records).length,
-      inputKeys: Object.keys(records),
-      outputKeys: Object.keys(next.records),
-    });
-  }
-  
   return next;
 };
 
@@ -202,28 +166,12 @@ export const createBookingRecord = ({
 
 export const upsertBookingRecord = (ledger, record) => {
   if (!ledger || !record?.serviceKey) {
-    if (__DEV__) {
-      console.warn('[upsertBookingRecord] Invalid input:', {
-        hasLedger: !!ledger,
-        hasRecord: !!record,
-        hasServiceKey: !!record?.serviceKey,
-      });
-    }
     return ledger;
   }
   const next = normalizeBookingLedger(ledger);
   const { serviceKey, serviceType } = record;
   // Deep copy the record to ensure all nested properties are preserved
   next.records[serviceKey] = JSON.parse(JSON.stringify(record));
-  
-  if (__DEV__) {
-    console.log('[upsertBookingRecord] Added record:', {
-      serviceKey,
-      serviceType,
-      recordCount: Object.keys(next.records).length,
-      recordKeys: Object.keys(next.records),
-    });
-  }
 
   if (!Array.isArray(next.byType[serviceType])) {
     next.byType[serviceType] = [];
