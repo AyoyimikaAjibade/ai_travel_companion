@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
 import json, ulid, requests
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 
 from base_models import * 
@@ -55,14 +55,6 @@ app.add_middleware(
 # Load rental car data once when the app starts
 with open("car_list_mock.json") as f:
     CARS_DATA = json.load(f)
-
-# Verify environment variables on startup
-from services.config import GEMINI_KEY, AMADEUS_KEY, AMADEUS_SECRET
-
-
-# ------------------------------
-# Helper Functions
-# ------------------------------
 
 def _persist_to_backend(
     user_id: Optional[str],
@@ -130,7 +122,7 @@ def chat(
     - If information is missing, returns ParseResponse to ask for clarification
     - For revisions, preserves slot_id and detects when user is modifying existing complete slots
 
-    FE sends: { message, current_slots }
+    FE sends: { message, current_slots, user_id(optional) }
     BE returns: 
     - ParseResponse { slots, missing, reply } if information is missing
     - TravelOptionsResponse { plan_id, slot_id, flight, hotel, attractions, timestamps } if complete

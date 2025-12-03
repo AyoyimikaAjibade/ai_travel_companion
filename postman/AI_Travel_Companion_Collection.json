@@ -286,6 +286,21 @@
         },
         {
           "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.environment.unset('access_token');",
+                  "    pm.environment.unset('refresh_token');",
+                  "    pm.environment.unset('user_id');",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -325,7 +340,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Updated\",\n  \"last_name\": \"Name\"\n}"
+              "raw": "{\n  \"first_name\": \"First\",\n  \"last_name\": \"User\"\n}"
             },
             "url": {
               "raw": "{{full_url}}/users/me",
@@ -418,7 +433,7 @@
             "url": {
               "raw": "{{full_url}}/chats/?skip=0&limit=100",
               "host": ["{{full_url}}"],
-              "path": ["chats"],
+              "path": ["chats", ""],
               "query": [
                 {
                   "key": "skip",
