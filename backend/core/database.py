@@ -34,11 +34,11 @@ def get_db():
 
 def init_db():
     """Initialize the database by creating all tables."""
-    # Import models to ensure they are registered with SQLAlchemy
     from models.user import User, UserPreference
     from models.chat import Chat
     from models.plan import Plan
     from models.chat_message import ChatMessage
+    from models.token_blacklist import TokenBlacklist
     from models.base import BaseModel
     
     BaseModel.metadata.create_all(bind=engine)

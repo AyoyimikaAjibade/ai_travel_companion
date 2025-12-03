@@ -58,15 +58,39 @@ def create_refresh_token(subject: Union[str, Any], expires_delta: timedelta = No
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def is_token_blacklisted(db: Session, token: str) -> bool:
+    import hashlib
+    from models.token_blacklist import TokenBlacklist
+    from datetime import datetime
+    
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    blacklisted = db.query(TokenBlacklist).filter(
+        TokenBlacklist.token_hash == token_hash
+    ).first()
+    
+    if blacklisted:
+        if blacklisted.expires_at > datetime.utcnow():
+            return True
+        else:
+            try:
+                db.delete(blacklisted)
+                db.commit()
+            except Exception:
+                db.rollback()
+    
+    return False
+
 async def get_current_user(
     db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
 ) -> User:
-    """Get the current user from the token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    if is_token_blacklisted(db, token):
+        raise credentials_exception
     
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -78,6 +102,10 @@ async def get_current_user(
         user = db.query(User).filter(User.id == UUID(token_data.sub)).first()
         if user is None:
             raise credentials_exception
+        
+        if not user.is_active:
+            raise credentials_exception
+            
         return user
         
     except (JWTError, ValidationError):
@@ -95,8 +123,10 @@ def get_current_active_user(
 async def get_current_user_optional(
     db: Session = Depends(get_db), token: Optional[str] = Depends(oauth2_scheme_optional)
 ) -> Optional[User]:
-    """Get the current user from the token if provided, otherwise return None."""
     if not token:
+        return None
+    
+    if is_token_blacklisted(db, token):
         return None
     
     try:
@@ -107,6 +137,8 @@ async def get_current_user_optional(
             return None
             
         user = db.query(User).filter(User.id == UUID(token_data.sub)).first()
+        if user and not user.is_active:
+            return None
         return user
         
     except (JWTError, ValidationError):

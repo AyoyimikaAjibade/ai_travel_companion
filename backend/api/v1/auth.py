@@ -19,7 +19,7 @@ from core.security import (
     get_password_hash, verify_password,
     create_access_token, create_refresh_token,
     get_current_user, get_current_active_user,
-    SECRET_KEY, ALGORITHM
+    SECRET_KEY, ALGORITHM, oauth2_scheme
 )
 from core.config import settings
 
@@ -180,15 +180,10 @@ def change_password(
 def logout(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
+    token: str = Depends(oauth2_scheme)
 ) -> Any:
-    """
-    Logout the current user.
-    Note: In JWT-based authentication, logout is typically handled client-side
-    by removing tokens from storage. This endpoint provides server-side logout
-    tracking for audit purposes.
-    """
-    success = auth_service.logout_user(db, current_user.id)
+    success = auth_service.logout_user(db, current_user.id, token)
     
     if not success:
         raise HTTPException(

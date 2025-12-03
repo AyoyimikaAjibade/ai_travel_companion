@@ -145,18 +145,36 @@ class AuthService(BaseService[User]):
         user = self.user_repository.activate_user(db, user_id)
         return user is not None
     
-    def logout_user(self, db: Session, user_id: UUID) -> bool:
-        """Logout user by invalidating their session (optional implementation)."""
-        # In a stateless JWT system, logout is typically handled client-side
-        # by removing the token from storage. However, we can track logout events
-        # for audit purposes or implement token blacklisting if needed.
+    def logout_user(self, db: Session, user_id: UUID, access_token: str) -> bool:
+        from models.token_blacklist import TokenBlacklist
+        from jose import jwt
+        from datetime import datetime
+        from core.config import settings
         
-        # For now, we'll just update the last login to track logout events
-        # In a production system, you might want to implement token blacklisting
         user = self.user_repository.get_by_id(db, user_id)
         if not user:
             return False
         
-        # Update last login timestamp to track logout
-        self.user_repository.update_last_login(db, user_id)
-        return True
+        try:
+            payload = jwt.decode(access_token, settings.JWT_SECRET_KEY, algorithms=[settings.ALGORITHM])
+            expires_at = datetime.utcfromtimestamp(payload.get("exp", 0))
+            
+            token_hash = TokenBlacklist.hash_token(access_token)
+            
+            existing = db.query(TokenBlacklist).filter(
+                TokenBlacklist.token_hash == token_hash
+            ).first()
+            
+            if not existing:
+                blacklist_entry = TokenBlacklist(
+                    token_hash=token_hash,
+                    user_id=user_id,
+                    expires_at=expires_at
+                )
+                db.add(blacklist_entry)
+                db.commit()
+            
+            return True
+        except Exception:
+            db.rollback()
+            return False
