@@ -2,14 +2,14 @@
 Chat management API endpoints.
 """
 
-from typing import List, Any, Dict
+from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from dependencies import get_db, get_chat_service
 from services.chat_service import ChatService
-from models.chat import ChatPublic, Chat
+from models.chat import Chat
 from core.security import get_current_active_user
 from models.user import User
 

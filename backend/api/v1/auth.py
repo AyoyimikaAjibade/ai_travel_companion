@@ -11,14 +11,12 @@ from dependencies import get_db, get_auth_service
 from services.auth_service import AuthService
 from models.user import User, UserCreate
 from schemas.user import (
-    User as UserSchema, UserLogin,
+    User as UserSchema,
     PasswordResetRequest, ChangePassword
 )
-from schemas.token import Token, TokenCreate, TokenPayload
+from schemas.token import Token, TokenPayload
 from core.security import (
-    get_password_hash, verify_password,
-    create_access_token, create_refresh_token,
-    get_current_user, get_current_active_user,
+    create_access_token, get_current_active_user,
     SECRET_KEY, ALGORITHM, oauth2_scheme
 )
 from core.config import settings
