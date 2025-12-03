@@ -5,7 +5,6 @@ This module provides dependency injection for the application layers.
 
 from typing import Generator
 from sqlalchemy.orm import Session
-from fastapi import Depends
 
 from core.database import SessionLocal
 from services.auth_service import AuthService

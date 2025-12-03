@@ -4,23 +4,20 @@ from sqlmodel import SQLModel, Field
 import uuid
 
 class BaseModel(SQLModel):
-    """
-    Base model with common fields for all database models.
-    """
     id: Optional[uuid.UUID] = Field(
         default_factory=uuid.uuid4,
         primary_key=True,
         index=True,
         nullable=False,
     )
-    created_at: datetime = Field(
+    created_time: datetime = Field(
         default_factory=datetime.utcnow,
         nullable=False,
-        index=True,
+        index=True
     )
-    updated_at: datetime = Field(
+    updated_time: datetime = Field(
         default_factory=datetime.utcnow,
-        nullable=False,
+        nullable=False
     )
     
     class Config:

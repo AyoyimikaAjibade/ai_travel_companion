@@ -5,7 +5,6 @@ Base repository class providing common database operations.
 from abc import ABC
 from typing import TypeVar, Generic, Type, Optional, List, Any, Dict
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
 from uuid import UUID
 
 from models.base import BaseModel
@@ -81,10 +80,9 @@ class BaseRepository(ABC, Generic[T]):
                 if hasattr(db_obj, field):
                     setattr(db_obj, field, value)
             
-            # Update updated_at timestamp if it exists
-            if hasattr(db_obj, 'updated_at'):
+            if hasattr(db_obj, 'updated_time'):
                 from datetime import datetime
-                db_obj.updated_at = datetime.utcnow()
+                db_obj.updated_time = datetime.utcnow()
             
             db.add(db_obj)
             db.commit()

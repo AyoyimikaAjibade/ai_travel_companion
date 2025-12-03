@@ -1,11 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from datetime import timedelta
 import uvicorn
-import os
 
 from core.database import init_db, engine
 from models.base import BaseModel as Base
@@ -34,9 +29,6 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
-# Mount static files (if needed)
-# app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.on_event("startup")
 async def startup_event():

@@ -2,7 +2,7 @@
 Chat message repository for chat message database operations.
 """
 
-from typing import Optional, List
+from typing import List
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -20,21 +20,19 @@ class ChatMessageRepository(BaseRepository[ChatMessage]):
         """Get all messages for a specific chat."""
         return db.query(ChatMessage).filter(
             ChatMessage.chat_id == chat_id
-        ).order_by(ChatMessage.created_at.asc()).offset(skip).limit(limit).all()
+        ).order_by(ChatMessage.created_time.asc()).offset(skip).limit(limit).all()
     
     def get_messages_by_slot_id(self, db: Session, slot_id: str, skip: int = 0, limit: int = 100) -> List[ChatMessage]:
-        """Get messages by slot_id (AI service chat ID)."""
         return db.query(ChatMessage).filter(
             ChatMessage.slot_id == slot_id
-        ).order_by(ChatMessage.created_at.asc()).offset(skip).limit(limit).all()
+        ).order_by(ChatMessage.created_time.asc()).offset(skip).limit(limit).all()
     
     def get_user_messages(self, db: Session, user_id: UUID, skip: int = 0, limit: int = 100) -> List[ChatMessage]:
-        """Get all messages for a user (across all chats)."""
         return db.query(ChatMessage).join(
             ChatMessage.chat
         ).filter(
             ChatMessage.chat.has(user_id=user_id)
-        ).order_by(ChatMessage.created_at.desc()).offset(skip).limit(limit).all()
+        ).order_by(ChatMessage.created_time.desc()).offset(skip).limit(limit).all()
     
     def bulk_create_messages(self, db: Session, messages: List[dict]) -> List[ChatMessage]:
         """Bulk create chat messages with transaction handling."""

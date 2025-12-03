@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlmodel import SQLModel, Field
+from sqlmodel import Field
 import uuid
 import hashlib
 

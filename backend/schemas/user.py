@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 
 class UserBase(BaseModel):
@@ -25,11 +25,10 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(None, min_length=8, max_length=100)
 
 class UserInDBBase(UserBase):
-    """Base schema for user stored in DB."""
     id: UUID
     is_active: bool = True
-    created_at: datetime
-    updated_at: datetime
+    created_time: datetime
+    updated_time: datetime
 
     class Config:
         from_attributes = True

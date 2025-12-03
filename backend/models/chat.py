@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 import uuid
 
@@ -54,12 +54,11 @@ class ChatUpdate(SQLModel):
     notes: Optional[str] = None
 
 class ChatPublic(ChatBase):
-    """Public chat model for API responses."""
     id: uuid.UUID
-    user_id: Optional[uuid.UUID]  # Optional for anonymous/unauthenticated users
+    user_id: Optional[uuid.UUID]
     share_code: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    created_time: datetime
+    updated_time: datetime
 
 class Chat(ChatBase, BaseModel, table=True):
     """Chat model for database representation."""

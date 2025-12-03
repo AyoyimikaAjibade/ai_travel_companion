@@ -4,7 +4,7 @@ Authentication service for handling user authentication and authorization.
 
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
-from datetime import timedelta, datetime
+from datetime import timedelta
 from uuid import UUID
 import secrets
 import string

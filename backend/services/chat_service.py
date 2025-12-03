@@ -4,8 +4,7 @@ Chat service for chat management operations.
 
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from uuid import UUID, uuid4
-from datetime import date
+from uuid import UUID
 
 from .base_service import BaseService
 from repositories.chat_repository import ChatRepository
@@ -95,7 +94,7 @@ class ChatService(BaseService[Chat]):
             "adults": chat.adults,
             "total_plans": 0,  # Would query plan repository
             "total_messages": 0,  # Would query chat message repository
-            "created_at": chat.created_at
+            "created_time": chat.created_time
         }
         
         return stats

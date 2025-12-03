@@ -1,8 +1,6 @@
 """
 Chat message model for tracking conversation history.
 """
-
-from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 import uuid

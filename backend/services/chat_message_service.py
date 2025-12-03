@@ -2,13 +2,13 @@
 Chat message service for managing conversation history.
 """
 
-from typing import Optional, List
+from typing import List
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from .base_service import BaseService
 from repositories.chat_message_repository import ChatMessageRepository
-from models.chat_message import ChatMessage, ChatMessageCreate, ChatMessageUpdate
+from models.chat_message import ChatMessage, ChatMessageCreate
 
 
 class ChatMessageService(BaseService[ChatMessage]):

@@ -3,7 +3,7 @@ Base service class providing common functionality for all services.
 """
 
 from abc import ABC
-from typing import TypeVar, Generic, Type, Optional, List, Any
+from typing import TypeVar, Generic, Optional, List, Any
 from sqlalchemy.orm import Session
 from uuid import UUID
 
