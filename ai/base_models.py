@@ -124,6 +124,7 @@ class AttractionOption(BaseModel):
 class TravelOptionsResponse(BaseModel):
     plan_id: Optional[str] = None
     slot_id: Optional[str] = None
+    current_slots: Optional[Slots] = None
     flight : Optional[FlightOption] = None
     hotel : Optional[HotelOption] = None
     car : Optional[CarOption] = None

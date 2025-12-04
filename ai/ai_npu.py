@@ -56,6 +56,58 @@ app.add_middleware(
 with open("car_list_mock.json") as f:
     CARS_DATA = json.load(f)
 
+# --------------------
+# Helper Functions
+# --------------------
+
+# Cache latest fulfilled plan + slots per slot_id to prevent duplicate generation
+PLAN_CACHE: Dict[str, Dict[str, Any]] = {}
+
+# To check random/low signal message from user
+# e.g.: ...., miss clicked msgs
+# Returns True when the user input is only whitespace/punctuation so we can skip the LLM call.
+def is_low_signal_message(message: str) -> bool:
+    if not message:
+        return True
+    stripped = message.strip()
+    if not stripped:
+        return True
+    return not any(ch.isalnum() for ch in stripped)
+
+# LLM Helper - Evaluate which slots are incomplete, so the app not only depend on LLM output.
+# It recompute slot fleids after merge the slots
+def compute_missing_slots(slots: Slots) -> List[str]:
+    missing: List[str] = []
+
+    if not slots.origin_airport_code:
+        missing.append("origin_airport_code")
+    if not slots.destination_airport_code:
+        missing.append("destination_airport_code")
+    if not slots.destination_city_name:
+        missing.append("destination_city_name")
+    if not slots.destination_city_code:
+        missing.append("destination_city_code")
+
+    if not slots.dates or not slots.dates.start or not slots.dates.end:
+        missing.append("dates")
+
+    pax_adults = slots.pax.adults if slots.pax else None
+    if pax_adults is None or pax_adults <= 0:
+        missing.append("pax")
+
+    if slots.budget is None:
+        missing.append("budget")
+
+    if slots.car is None:
+        missing.append("car")
+
+    hotel_request = slots.hotel.request if slots.hotel else None
+    if hotel_request is None:
+        missing.append("hotel")
+
+    return missing
+
+# Persist the data to the backend
 def _persist_to_backend(
     user_id: Optional[str],
     current_slots: Optional[Dict[str, Any]],
@@ -130,13 +182,22 @@ def chat(
     # 1) Normalize current slots & guarantee slot_id
     current_slots = request.current_slots or Slots()  # Slots validator auto-assigns slot_id
                                                       # If FE sent slot_id:null, validator also assigns a new id
-
+    if is_low_signal_message(request.message):
+        print("⚠️ Low-signal message detected, skipping Gemini call.")
+        missing = compute_missing_slots(current_slots)
+        return ParseResponse(
+            current_slots=current_slots,
+            missing=missing,
+            reply="I didn't catch that—let me know what you'd like to change."
+        )
+        
     # 2) LLM revise/fill and read parsed fields
     result = call_gemini(request.message, current_slots)
+    print(f"=========\nAI: result: {result}\n=========")
     slots_dict = result.get("current_slots", {})
-    missing = result.get("missing", [])
+    llm_missing = result.get("missing", [])
     reply = result.get("reply", " ")
-    
+
     # Ensure reply is always a string, not a list
     if isinstance(reply, list):
         reply = " ".join(reply) if reply else " "
@@ -146,9 +207,31 @@ def chat(
         new_current_slots = merge_slots_preserve_id(current_slots, slots_dict)
     except Exception as e:
         new_current_slots = current_slots
+    
+    # 4) Check if we have all the required information
+    if "__llm_error__" in llm_missing:
+        missing = ["__llm_error__"]
+    else:
+        missing = compute_missing_slots(new_current_slots)
 
-    # 4) Check if we have all required information
     if not missing:
+        print("\n✅ All slots filled, proceeding with search...")
+    
+        # To fix "Keep sending travel plan without users reqeust" issue
+        # If the slot_id is same, send sample ParseResponse
+        slot_snapshot = new_current_slots.model_dump(mode='json', exclude_none=False)
+        slot_cache_key = new_current_slots.slot_id
+        cached_plan = PLAN_CACHE.get(slot_cache_key)
+
+        if cached_plan and cached_plan["slots"] == slot_snapshot:
+            return ParseResponse(
+                current_slots=new_current_slots,
+                missing=[],
+                # reply="Nothing new to update—let me know what you'd like to change."
+                reply = reply
+            )
+        
+        print("\n🆕 Plan creation Started...")
         plan_id = ulid.new().str
         created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         updated_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -165,11 +248,12 @@ def chat(
             new_current_slots.dates.start,
             new_current_slots.pax.adults is not None
         ])
+        print(f"\n✅ CAN SEARCH FLIGHTS: {can_search_flights} ✅")
         flight_total_price = 0
 
         if can_search_flights:
             try:
-                print(f"Searching flights: {new_current_slots.origin_airport_code} -> {new_current_slots.destination_airport_code}")
+                print(f"✈️Searching flights: {new_current_slots.origin_airport_code} -> {new_current_slots.destination_airport_code}...")
                 flight_results = amadeus_search_flights(new_current_slots)
                 print(f"Flight search returned {len(flight_results) if flight_results else 0} results")
                 if flight_results:
@@ -183,12 +267,13 @@ def chat(
                         selected_total['price'] = total_price
                         flight = FlightOption(**selected_total)
                         flight_total_price = total_price
-                        print(f"Selected flight: {flight.airline} - ${total_price:.2f}")
+                        print(f"✈️Selected flight: {flight.airline} - ${total_price:.2f}")
             except Exception as e:
-                print(f"ERROR: Flight search failed: {type(e).__name__}: {e}")
+                print(f"❌ ERROR: Flight search failed: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
-
+        else:
+            print("\n✈️ Flight Search is SKIPPED.")
 
         # --- Hotel Search ---
         can_search_hotels = all([
@@ -197,11 +282,12 @@ def chat(
             new_current_slots.dates.start, new_current_slots.dates.end,
             new_current_slots.pax.adults is not None
         ])
+        print(f"\n✅ CAN SEARCH HOTELS: {can_search_hotels} ✅")
         hotel_total_price = 0
 
         if can_search_hotels:
             try:
-                print(f"Searching hotels for: {new_current_slots.destination_city_code}")
+                print(f"🏨Searching hotels for: {new_current_slots.destination_city_code}...")
                 hotel_results = amadeus_search_hotels(new_current_slots)
                 print(f"Hotel search returned {len(hotel_results) if hotel_results else 0} results")
                 if hotel_results:
@@ -210,30 +296,34 @@ def chat(
                     if selected_hotel:
                         hotel = HotelOption(**selected_hotel)
                         hotel_total_price = hotel.total_price
-                        print(f"Selected hotel: {hotel.name} - ${hotel_total_price:.2f}")
+                        print(f"\n🏨 Selected hotel: {hotel.name} - ${hotel_total_price:.2f}")
             except Exception as e:
-                print(f"ERROR: Hotel search failed: {type(e).__name__}: {e}")
+                print(f"❌ ERROR: Hotel search failed: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
-            
+        else:
+            print("\n🏨 Hotel Search is SKIPPED.")
 
         # --- Attraction Search ---
         can_search_attractions = new_current_slots.destination_city_code is not None
+        print(f"\n✅ CAN SEARCH ATTRACTIONS: {can_search_attractions} ✅")
         attraction_total_price = 0
 
         if can_search_attractions:
             try:
                 attraction_results = amadeus_search_attractions(new_current_slots)
-                print(f"Attraction search returned {len(attraction_results) if attraction_results else 0} results")
+                print(f"🎢 Attraction search returned {len(attraction_results) if attraction_results else 0} results")
                 if attraction_results:
                     attractions_list = [AttractionOption(**attr) for attr in attraction_results]
             except Exception as e:
-                print(f"ERROR: Attraction search failed: {type(e).__name__}: {e}")
+                print(f"❌ ERROR: Attraction search failed: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
             else:
-                print(f"No attractions found")  
-    
+                print(f"🎢 No attractions found")  
+        else:
+            print("\n🎢 Attrations Search is SKIPPED.")
+
         # Calculate and normalize attraction prices
         if attractions_list:
             attraction_total_price = sum(attr.price for attr in attractions_list)
@@ -242,34 +332,42 @@ def chat(
         
         # --- Car Search ---
         can_search_car = new_current_slots.car is True
+        print(f"\n✅ CAN SEARCH CAR: {can_search_car} ✅")
         car_total_price = 0
 
         if can_search_car:
+            print("🚗 Searching for car...")
             car = car_search_mock(new_current_slots, CARS_DATA)
             if car:
                 # Calculate days of using car based on the start and end information from slot  
+                print(f"\n🚗 Found {car} car.")
                 start_date = datetime.strptime(new_current_slots.dates.start, "%Y-%m-%d").date()
                 end_date = datetime.strptime(new_current_slots.dates.end, "%Y-%m-%d").date()
                 car_days = (end_date - start_date).days
                 car_total_price = car.price_per_day * car_days
+                print(f"\n🚗 Car rental for {car_days} days at {car.price_per_day}/day = ${car_total_price}\n")
+            else:
+                print("\n🚗 No car found")
+        else:
+            print("\n🚗 Car Search is SKIPPED.")
         
         total_price = flight_total_price + hotel_total_price + car_total_price + attraction_total_price
+        print(f"\n💰 The total price for the travel plan is: ${total_price:.2f}\n")
 
-    
         # Negative = under budget | Positive = over budget
         price_different:float = total_price - (new_current_slots.budget or 0)
 
         if price_different < 0.0: # Under budget
-            reply = f"Your trip total is under your budget!"
+            reply = f"Here is your travel plan. Your trip total is under your budget!"
             # reply = f"Your trip total is ${total_price:.2f} — that's under your ${new_current_slots.budget:.2f} budget."
         elif price_different == 0.0:
-            reply = f"Your trip total is same as your budget!"
+            reply = f"Here is your travel plan. Your trip total is same as your budget!"
             # reply = f"Your trip total is ${total_price:.2f} — that matches your ${new_current_slots.budget:.2f} budget."
         elif 0.0 < price_different <= 200.00:   # Over budget less than $200
-            reply = f"Your trip total is just a bit over your budget!"
+            reply = f"Here is your travel plan. Your trip total is just a bit over your budget!"
             # reply = f"Looks like the total comes to ${total_price:.2f}, which is just a bit over your ${new_current_slots.budget:.2f} budget, but it will be awesome!"
         elif 200.00 < price_different:      # Over budget more than $200
-            reply = f"Your trip total is quite a bit above your budget!"
+            reply = f"Here is your travel plan. Your trip total is quite a bit above your budget!"
             # reply = f"Hmm, this trip totals ${total_price:.2f} — that's quite a bit above your ${new_current_slots.budget:.2f} budget."
 
         # Ensure slot_id is set (should always be set by validator, but double-check)
@@ -282,6 +380,7 @@ def chat(
         ai_response_data = {
             "plan_id": plan_id,
             "slot_id": final_slot_id,
+            # "current_slots": new_current_slots.model_dump(mode='json', exclude_none=True),
             "flight": flight.model_dump(mode='json', exclude_none=True) if flight else None,
             "hotel": hotel.model_dump(mode='json', exclude_none=True) if hotel else None,
             "car": car.model_dump(mode='json', exclude_none=True) if car else None,
@@ -295,6 +394,7 @@ def chat(
         response = TravelOptionsResponse(
             plan_id = plan_id,
             slot_id = final_slot_id,
+            current_slots = new_current_slots,
             flight = flight,
             hotel = hotel,
             car = car,
@@ -303,7 +403,13 @@ def chat(
             updated_time = updated_time,
             reply = reply
         )
-        
+
+        # Cache slots + response for this slot_id to avoid duplicate plan generation
+        PLAN_CACHE[final_slot_id] = {
+            "slots": slot_snapshot,
+            "response": response.model_dump(mode='json')
+        }
+
         try:
             _persist_to_backend(
                 user_id=request.user_id,
