@@ -8,13 +8,14 @@ export function setApiBaseUrl(url) {
 
 /**
  * sendMessage now accepts:
- *  { message: string, phase?: string, sessionId?: string, slots?: object }
+ *  { message: string, phase?: string, sessionId?: string, slots?: object, userId?: string }
  */
 export async function sendMessage({
   message,
   phase = "idle",
   sessionId = null,
   currentSlots = null,
+  userId = null,
 } = {}) {
   if (typeof message !== "string") {
     throw new Error("sendMessage requires { message: string }");
@@ -26,6 +27,10 @@ export async function sendMessage({
     session_id: sessionId,
     current_slots: currentSlots,
   };
+
+   if (userId) {
+     body.user_id = userId;
+   }
 
   console.log("[Chat Endpoint] Sending request:", {
     endpoint: CHAT_ENDPOINT,

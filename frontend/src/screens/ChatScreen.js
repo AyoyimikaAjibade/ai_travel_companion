@@ -101,6 +101,25 @@ const mergeSlots = (overrides = {}) => {
   };
 };
 
+const getSessionAuth = () => {
+  try {
+    const state = useSessionStore.getState?.() || {};
+    const userId =
+      state.userId ??
+      state.user?.id ??
+      state.user?.user_id ??
+      state.user?.userId ??
+      null;
+    return {
+      userId,
+      isLoggedIn: Boolean(state.accessToken),
+    };
+  } catch (error) {
+    if (__DEV__) console.warn("Unable to read session auth data", error);
+    return { userId: null, isLoggedIn: false };
+  }
+};
+
 /* ====== Config ====== */
 const QUICK_CHIPS = [
   "Add car",
@@ -507,6 +526,7 @@ class ChatScreenClass extends React.Component {
 
   sendToServer = async (messageText) => {
     const { phase, sessionId, currentSlots } = this.state;
+    const { userId, isLoggedIn } = getSessionAuth();
     const slotsPayload =
       currentSlots && typeof currentSlots === "object"
         ? mergeSlots(currentSlots)
@@ -517,6 +537,9 @@ class ChatScreenClass extends React.Component {
       sessionId,
       currentSlots: slotsPayload,
     };
+    if (isLoggedIn && userId) {
+      payload.userId = userId;
+    }
     return sendMessage(payload);
   };
 

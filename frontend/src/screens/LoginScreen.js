@@ -64,6 +64,10 @@ export default function LoginScreen({ navigation }) {
       const authResponse = await login({ username, password });
       const accessToken =
         authResponse?.access_token ?? authResponse?.token ?? null;
+      const refreshToken =
+        authResponse?.refresh_token ?? authResponse?.refreshToken ?? null;
+      const userIdFromAuth =
+        authResponse?.user_id ?? authResponse?.userId ?? null;
 
       if (!accessToken) {
         throw new Error("Missing access token in login response.");
@@ -75,7 +79,19 @@ export default function LoginScreen({ navigation }) {
         profile = await getCurrentUser(accessToken);
       }
 
-      setSession({ user: profile, accessToken });
+      const derivedUserId =
+        userIdFromAuth ??
+        profile?.id ??
+        profile?.user_id ??
+        profile?.userId ??
+        null;
+
+      setSession({
+        user: profile,
+        accessToken,
+        refreshToken,
+        userId: derivedUserId,
+      });
       Alert.alert("Welcome back", "You are logged in.");
       navigation.replace("Main", { screen: "Chat" });
     } catch (error) {
