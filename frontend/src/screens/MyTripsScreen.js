@@ -1,5 +1,5 @@
 // src/screens/MyTripsScreen.js
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,11 +9,14 @@ import {
   Modal,
   TextInput,
   Alert,
+  RefreshControl,
+  ScrollView,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import Animated, { FadeIn, Layout } from "react-native-reanimated";
 import { formatDistanceToNow } from "date-fns";
 import { Pencil, Trash2, MessageCircle } from "lucide-react-native";
 import EmptyState from "../components/EmptyState";
@@ -21,10 +24,10 @@ import LoadingSkeleton from "../components/LoadingSkeleton";
 import { COLORS, SPACING, BORDER_RADIUS } from "../theme";
 import { useSavedChatsStore } from "../stores/savedChatsStore";
 import { formatCurrency } from "../utils/format";
-import {
-  normalizeBookingLedger,
-  getActiveBookings,
-} from "../utils/booking";
+import { normalizeBookingLedger, getActiveBookings } from "../utils/booking";
+import { useSessionStore } from "../stores/sessionStore";
+import { fetchChats, fetchChatMessages } from "../lib/api";
+import LottieView from "lottie-react-native";
 
 const serviceTypeLabel = (type) => {
   const normalized = (type || "").toLowerCase();
@@ -51,6 +54,10 @@ const MyTripsScreen = ({ navigation }) => {
   const deleteChat = useSavedChatsStore((state) => state.deleteChat);
   const renameChat = useSavedChatsStore((state) => state.renameChat);
   const setActiveChat = useSavedChatsStore((state) => state.setActiveChat);
+  const updateChatContent = useSavedChatsStore(
+    (state) => state.updateChatContent
+  );
+  const accessToken = useSessionStore((s) => s.accessToken);
 
   const [renameVisible, setRenameVisible] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -58,6 +65,10 @@ const MyTripsScreen = ({ navigation }) => {
   const [hydrated, setHydrated] = useState(
     useSavedChatsStore.persist?.hasHydrated?.() ?? true
   );
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshAnimKey, setRefreshAnimKey] = useState(0);
+  const [syncingChatId, setSyncingChatId] = useState(null);
+  const refreshLottieRef = useRef(null);
 
   useEffect(() => {
     const persist = useSavedChatsStore.persist;
@@ -71,6 +82,122 @@ const MyTripsScreen = ({ navigation }) => {
       setHydrated(true);
     }
   }, []);
+
+  const mapServerMessages = (serverMessages = []) => {
+    const mapped = [];
+    let latestSlots = null;
+    let latestMissing = [];
+
+    serverMessages.forEach((msg) => {
+      const ts = msg?.updated_time ?? msg?.created_time ?? Date.now();
+      const ai = msg?.ai_response_data;
+      if (msg?.role === "user") {
+        mapped.push({
+          id: msg.id ?? ts,
+          role: "user",
+          text: msg.content ?? "",
+          timestamp: new Date(ts),
+        });
+        return;
+      }
+
+      const plan =
+        ai && (ai.plan_id || ai.planId || ai.flight || ai.hotel || ai.car)
+          ? {
+              planId: ai.plan_id ?? ai.planId ?? null,
+              slotId:
+                ai.slot_id ??
+                ai.slotId ??
+                ai.current_slots?.slot_id ??
+                latestSlots?.slot_id ??
+                null,
+              flight: ai.flight ?? null,
+              hotel: ai.hotel ?? null,
+              car: ai.car ?? null,
+              attractions: Array.isArray(ai.attractions) ? ai.attractions : [],
+              currentSlots: ai.current_slots ?? latestSlots ?? null,
+            }
+          : null;
+
+      if (ai?.current_slots) {
+        latestSlots = ai.current_slots;
+      }
+      if (Array.isArray(ai?.missing)) {
+        latestMissing = ai.missing;
+      }
+
+      mapped.push({
+        id: msg.id ?? `bot-${ts}`,
+        role: "bot",
+        text: msg.content ?? ai?.reply ?? "",
+        timestamp: new Date(ts),
+        plan,
+      });
+    });
+
+    return {
+      messages: mapped,
+      currentSlots: latestSlots,
+      missing: latestMissing,
+    };
+  };
+
+  const hydrateRemoteChats = React.useCallback(async () => {
+    if (!accessToken) return;
+    const animKey = Date.now();
+    setRefreshAnimKey(animKey);
+    setRefreshing(true);
+    const start = Date.now();
+    try {
+      const remote = await fetchChats(accessToken, { skip: 0, limit: 5 });
+      if (Array.isArray(remote)) {
+        remote.forEach((entry) => {
+          const slots = entry?.current_slots;
+          const chatId = slots?.chat_id ?? slots?.slot_id;
+          if (!chatId || !slots) return;
+          const title =
+            slots.origin_airport_code && slots.destination_airport_code
+              ? `${slots.origin_airport_code} ✈️ ${slots.destination_airport_code}`
+              : undefined;
+          const preview = slots.destination_city_name
+            ? `Trip to ${slots.destination_city_name}`
+            : undefined;
+          updateChatContent(chatId, [], {
+            currentSlots: slots,
+            sessionId: slots.slot_id ?? null,
+            phase: "idle",
+            status: "draft",
+            title,
+            preview,
+            forcePersist: true,
+          });
+        });
+      }
+    } catch (err) {
+      console.warn("Unable to load trips", err?.message || err);
+    } finally {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, 2000 - elapsed);
+      setTimeout(() => {
+        setRefreshing(false);
+      }, remaining);
+    }
+  }, [accessToken, updateChatContent]);
+
+  useEffect(() => {
+    if (refreshing && refreshLottieRef.current) {
+      try {
+        // Start from mid animation (approx frame 30) for a quick visual
+        refreshLottieRef.current.play(30, 200);
+      } catch {
+        refreshLottieRef.current?.play?.();
+      }
+    }
+  }, [refreshing, refreshAnimKey]);
+
+  useEffect(() => {
+    hydrateRemoteChats();
+  }, [hydrateRemoteChats]);
 
   const sections = useMemo(() => {
     if (!Array.isArray(chats)) return [];
@@ -132,20 +259,61 @@ const MyTripsScreen = ({ navigation }) => {
     );
   };
 
-  const handleContinue = (chat) => {
-    setActiveChat(chat.id);
-    const bookingLedger = normalizeBookingLedger(chat.booking);
-    const records = Object.values(bookingLedger.records || {});
-    if (records.length) {
-      const active = getActiveBookings(bookingLedger);
-      const firstRecord = active[0] ?? records[0];
-      navigation.navigate("BookingConfirmation", {
-        chatId: chat.id,
-        serviceKey: firstRecord?.serviceKey,
-        batchId: firstRecord?.batchId ?? undefined,
+  const handleContinue = async (chat) => {
+    const navigateToExistingBooking = () => {
+      const bookingLedger = normalizeBookingLedger(chat.booking);
+      const records = Object.values(bookingLedger.records || {});
+      if (records.length) {
+        const active = getActiveBookings(bookingLedger);
+        const firstRecord = active[0] ?? records[0];
+        navigation.navigate("BookingConfirmation", {
+          chatId: chat.id,
+          serviceKey: firstRecord?.serviceKey,
+          batchId: firstRecord?.batchId ?? undefined,
+        });
+        return true;
+      }
+      return false;
+    };
+
+    if (!accessToken) {
+      setActiveChat(chat.id);
+      if (!navigateToExistingBooking()) {
+        navigation.navigate("Chat", { chatId: chat.id });
+      }
+      return;
+    }
+
+    setSyncingChatId(chat.id);
+    try {
+      const serverMessages = await fetchChatMessages(accessToken, chat.id, {
+        skip: 0,
+        limit: 100,
       });
-    } else {
-      navigation.navigate("Chat", { chatId: chat.id });
+      const { messages, currentSlots, missing } = mapServerMessages(
+        Array.isArray(serverMessages) ? serverMessages : []
+      );
+      updateChatContent(chat.id, messages, {
+        currentSlots: currentSlots ?? chat.currentSlots ?? null,
+        missing: missing ?? chat.missing ?? [],
+        sessionId:
+          currentSlots?.slot_id ??
+          currentSlots?.session_id ??
+          chat.sessionId ??
+          null,
+        phase: "idle",
+        status: "draft",
+      });
+      setActiveChat(chat.id);
+      if (!navigateToExistingBooking()) {
+        navigation.navigate("Chat", { chatId: chat.id });
+      }
+    } catch (error) {
+      const message =
+        error?.message ?? "Could not load chat history from the server.";
+      Alert.alert("Trips", message);
+    } finally {
+      setSyncingChatId(null);
     }
   };
 
@@ -202,7 +370,11 @@ const MyTripsScreen = ({ navigation }) => {
       item.status === "cancelled" && hasAnyBookings && !activeRecords.length;
 
     return (
-      <View style={styles.tripCard}>
+      <Animated.View
+        style={styles.tripCard}
+        entering={FadeIn.duration(300)}
+        layout={Layout.springify()}
+      >
         <View style={styles.tripHeader}>
           <Text style={styles.tripTitle}>{item.title || "Untitled trip"}</Text>
           <View style={styles.headerActions}>
@@ -232,7 +404,9 @@ const MyTripsScreen = ({ navigation }) => {
         </Text>
 
         <Text style={styles.tripPreview}>
-          {hasAnyBookings ? bookingPreview : item.preview?.length
+          {hasAnyBookings
+            ? bookingPreview
+            : item.preview?.length
             ? item.preview
             : "Continue the conversation to build this itinerary."}
         </Text>
@@ -251,14 +425,16 @@ const MyTripsScreen = ({ navigation }) => {
             {hasAnyBookings ? "View bookings" : "Continue chat"}
           </Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     );
   };
 
   if (!hydrated) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={[styles.container, { paddingTop: insets.top || SPACING.md }]}>
+        <View
+          style={[styles.container, { paddingTop: insets.top || SPACING.md }]}
+        >
           <LoadingSkeleton height={120} style={styles.skeletonItem} />
           <LoadingSkeleton height={120} style={styles.skeletonItem} />
         </View>
@@ -268,7 +444,25 @@ const MyTripsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={[styles.container, { paddingTop: insets.top ? SPACING.sm : SPACING.lg }]}>
+      <View
+        style={[
+          styles.container,
+          { paddingTop: insets.top ? SPACING.sm : SPACING.lg },
+        ]}
+      >
+        {refreshing && (
+          <View pointerEvents="none" style={styles.refreshOverlay}>
+            <LottieView
+              key={refreshAnimKey}
+              source={require("../../assets/lottie/airplane-logistics.json")}
+              ref={refreshLottieRef}
+              autoPlay={false}
+              loop
+              speed={1.5}
+              style={styles.refreshAnimOverlay}
+            />
+          </View>
+        )}
         <View style={styles.header}>
           <Text style={styles.title}>Your trips</Text>
           <Text style={styles.subtitle}>
@@ -277,12 +471,26 @@ const MyTripsScreen = ({ navigation }) => {
         </View>
 
         {sections.length === 0 ? (
-          <View style={styles.emptyWrapper}>
+          <ScrollView
+            contentContainerStyle={[styles.emptyWrapper, { flexGrow: 1 }]}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={hydrateRemoteChats}
+                tintColor="transparent"
+                colors={["transparent"]}
+                progressBackgroundColor="transparent"
+                style={styles.hiddenRefresh}
+                progressViewOffset={-1000}
+              />
+            }
+            alwaysBounceVertical
+          >
             <EmptyState
               title="No saved trips yet"
-              description="Plan a trip in chat and it will show up here with options to rename or delete."
+              description="Pull to refresh to sync your server chats, or plan a trip in chat and it will show up here."
             />
-          </View>
+          </ScrollView>
         ) : (
           <SectionList
             sections={sections}
@@ -294,6 +502,18 @@ const MyTripsScreen = ({ navigation }) => {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             stickySectionHeadersEnabled={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={hydrateRemoteChats}
+                tintColor="transparent"
+                colors={["transparent"]}
+                progressBackgroundColor="transparent"
+                style={styles.hiddenRefresh}
+                progressViewOffset={-1000}
+              />
+            }
+            alwaysBounceVertical
           />
         )}
 
@@ -352,7 +572,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   header: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   title: {
     color: COLORS.text,
@@ -502,6 +722,31 @@ const styles = StyleSheet.create({
   },
   skeletonItem: {
     marginBottom: SPACING.sm,
+  },
+  refreshAnimWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: SPACING.md,
+  },
+  refreshAnim: {
+    width: 180,
+    height: 180,
+  },
+  refreshAnimOverlay: {
+    width: 170,
+    height: 170,
+  },
+  refreshOverlay: {
+    position: "absolute",
+    top: SPACING.lg * 2,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 10,
+  },
+  hiddenRefresh: {
+    height: 0.001,
+    opacity: 0,
   },
 });
 

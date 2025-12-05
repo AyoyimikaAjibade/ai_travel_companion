@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useSessionStore } from "../stores/sessionStore";
+import { useSavedChatsStore } from "../stores/savedChatsStore";
 import { COLORS, SPACING, BORDER_RADIUS } from "../theme";
 import { ChevronRight, LogOut } from "lucide-react-native";
 
@@ -19,6 +20,7 @@ const SettingsScreen = ({ navigation }) => {
   const updatePreferences = useSessionStore((s) => s.updatePreferences);
   const user = useSessionStore((s) => s.user);
   const clearSession = useSessionStore((s) => s.clearSession);
+  const clearSavedChats = useSavedChatsStore((s) => s.clearAll);
 
   const profileName = React.useMemo(() => {
     if (!user) return "Guest";
@@ -46,6 +48,7 @@ const SettingsScreen = ({ navigation }) => {
     // if clearSession exists, call it; otherwise navigate to Login
     try {
       if (clearSession) clearSession();
+      if (clearSavedChats) clearSavedChats();
     } catch {}
     navigation.replace("Login");
   };

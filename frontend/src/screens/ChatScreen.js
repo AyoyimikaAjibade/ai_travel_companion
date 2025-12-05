@@ -719,7 +719,17 @@ class ChatScreenClass extends React.Component {
 
     return (
       <View style={styles.suggestionWrap}>
-        <Text style={styles.suggestionLabel}>Suggested replies</Text>
+        <View style={styles.suggestionHeader}>
+          <Text style={styles.suggestionLabel}>Suggested replies</Text>
+          <TouchableOpacity
+            onPress={() => this.setState({ missing: [] })}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Dismiss suggestions"
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dismissText}>✕</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.suggestionRow}>
           {options.map((opt, idx) => (
             <TouchableOpacity
@@ -910,10 +920,19 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.sm,
     backgroundColor: COLORS.background,
   },
+  suggestionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.xs,
+  },
   suggestionLabel: {
     color: COLORS.textMuted,
     fontSize: 12,
-    marginBottom: SPACING.xs,
+  },
+  dismissText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
   },
   suggestionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   suggestionChip: {

@@ -1,5 +1,5 @@
 // src/screens/SignupScreen.js
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,9 @@ export default function SignupScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const usernameRef = useRef(null);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
 
   const validate = () => {
     if (!username.trim()) return "Enter a username.";
@@ -137,6 +140,9 @@ export default function SignupScreen({ navigation }) {
                     style={styles.input}
                     autoCapitalize="none"
                     returnKeyType="next"
+                    blurOnSubmit={false}
+                    ref={usernameRef}
+                    onSubmitEditing={() => emailRef.current?.focus?.()}
                     underlineColorAndroid="transparent"
                   />
                 </View>
@@ -155,6 +161,9 @@ export default function SignupScreen({ navigation }) {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     returnKeyType="next"
+                    blurOnSubmit={false}
+                    ref={emailRef}
+                    onSubmitEditing={() => passwordRef.current?.focus?.()}
                     underlineColorAndroid="transparent"
                   />
                 </View>
@@ -171,7 +180,10 @@ export default function SignupScreen({ navigation }) {
                     onChangeText={setPassword}
                     style={styles.input}
                     secureTextEntry
-                    returnKeyType="done"
+                    returnKeyType="go"
+                    blurOnSubmit={false}
+                    ref={passwordRef}
+                    onSubmitEditing={handleSignup}
                     underlineColorAndroid="transparent"
                   />
                 </View>

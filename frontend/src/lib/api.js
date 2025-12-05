@@ -384,7 +384,74 @@ function buildAuthHeaders(accessToken, extra = {}) {
   }
 
   return {
-    Authorization: `Bearer ${accessToken}`,
+    Authorization: accessToken.startsWith("Bearer")
+      ? accessToken
+      : `Bearer ${accessToken}`,
     ...extra,
   };
+}
+
+export async function fetchChats(accessToken, { skip = 0, limit = 5 } = {}) {
+  const headers = buildAuthHeaders(accessToken);
+  const endpoint = `${AUTH_BASE}/chats/?skip=${skip}&limit=${limit}`;
+
+  console.log("[Chats API] Sending request:", {
+    endpoint,
+    method: "GET",
+    headers: { ...headers, Authorization: "Bearer ***" },
+  });
+
+  const res = await fetch(endpoint, { method: "GET", headers });
+  const responseText = await res.text();
+  console.log("[Chats API] Received response:", {
+    status: res.status,
+    statusText: res.statusText,
+    headers: Object.fromEntries(res.headers.entries()),
+    responseText,
+  });
+
+  if (!res.ok) {
+    throw new Error(`API error ${res.status} ${res.statusText} ${responseText}`);
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch (err) {
+    throw new Error("Invalid JSON response from server");
+  }
+}
+
+export async function fetchChatMessages(
+  accessToken,
+  chatId,
+  { skip = 0, limit = 100 } = {}
+) {
+  if (!chatId) throw new Error("chatId is required");
+  const headers = buildAuthHeaders(accessToken);
+  const endpoint = `${AUTH_BASE}/chats/${chatId}/messages?skip=${skip}&limit=${limit}`;
+
+  console.log("[ChatMessages API] Sending request:", {
+    endpoint,
+    method: "GET",
+    headers: { ...headers, Authorization: "Bearer ***" },
+  });
+
+  const res = await fetch(endpoint, { method: "GET", headers });
+  const responseText = await res.text();
+  console.log("[ChatMessages API] Received response:", {
+    status: res.status,
+    statusText: res.statusText,
+    headers: Object.fromEntries(res.headers.entries()),
+    responseText,
+  });
+
+  if (!res.ok) {
+    throw new Error(`API error ${res.status} ${res.statusText} ${responseText}`);
+  }
+
+  try {
+    return JSON.parse(responseText);
+  } catch (err) {
+    throw new Error("Invalid JSON response from server");
+  }
 }

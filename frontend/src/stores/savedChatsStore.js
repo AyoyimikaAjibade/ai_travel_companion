@@ -248,7 +248,9 @@ export const useSavedChatsStore = create(
           if (index >= 0) {
             const existing = chats[index];
             const userRenamed = Boolean(existing.userRenamed);
-            const nextTitle = meaningful
+            const nextTitle = meta.title
+              ? meta.title
+              : meaningful
               ? generateSmartTitle(
                   sanitizedMessages,
                   now,
@@ -276,7 +278,12 @@ export const useSavedChatsStore = create(
               messages: sanitizedMessages,
               updatedAt: now,
               title: nextTitle,
-              preview: meaningful ? derivePreview(sanitizedMessages) : "",
+              preview:
+                meta.preview !== undefined
+                  ? meta.preview
+                  : meaningful
+                  ? derivePreview(sanitizedMessages)
+                  : "",
               sessionId:
                 meta.sessionId !== undefined
                   ? meta.sessionId
@@ -289,7 +296,8 @@ export const useSavedChatsStore = create(
               missing: Array.isArray(meta.missing)
                 ? meta.missing
                 : existing.missing ?? [],
-              ephemeral: !meaningful && !userRenamed,
+              ephemeral:
+                meta.forcePersist === true ? false : !meaningful && !userRenamed,
               status: nextStatus,
               booking: nextBooking,
             };
@@ -303,7 +311,9 @@ export const useSavedChatsStore = create(
           }
 
           const userRenamed = Boolean(meta?.title && meta.title.trim());
-          const nextTitle = meaningful
+          const nextTitle = meta.title
+            ? meta.title.trim()
+            : meaningful
             ? generateSmartTitle(
                 sanitizedMessages,
                 now,
@@ -331,13 +341,19 @@ export const useSavedChatsStore = create(
             createdAt: now,
             updatedAt: now,
             messages: sanitizedMessages,
-            preview: meaningful ? derivePreview(sanitizedMessages) : "",
+            preview:
+              meta.preview !== undefined
+                ? meta.preview
+                : meaningful
+                ? derivePreview(sanitizedMessages)
+                : "",
             userRenamed,
             sessionId: meta.sessionId ?? null,
             phase: meta.phase ?? "idle",
             currentSlots: meta.currentSlots ?? null,
             missing: Array.isArray(meta.missing) ? meta.missing : [],
-            ephemeral: !meaningful && !userRenamed,
+            ephemeral:
+              meta.forcePersist === true ? false : !meaningful && !userRenamed,
             status: nextStatus,
             booking: nextBooking,
           };

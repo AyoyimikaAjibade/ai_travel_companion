@@ -1,5 +1,5 @@
 // src/screens/LoginScreen.js
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -45,6 +45,8 @@ export default function LoginScreen({ navigation }) {
   const [resetResponse, setResetResponse] = useState(null);
   const [copied, setCopied] = useState(false);
   const setSession = useSessionStore((s) => s.setSession);
+  const usernameRef = useRef(null);
+  const passwordRef = useRef(null);
 
   const validate = () => {
     if (!username.trim()) return "Enter your username.";
@@ -229,6 +231,9 @@ export default function LoginScreen({ navigation }) {
                     style={styles.input}
                     autoCapitalize="none"
                     returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => passwordRef.current?.focus?.()}
+                    ref={usernameRef}
                   />
                 </View>
               </View>
@@ -249,7 +254,10 @@ export default function LoginScreen({ navigation }) {
                     onChangeText={setPassword}
                     style={styles.input}
                     secureTextEntry
-                    returnKeyType="done"
+                    returnKeyType="go"
+                    blurOnSubmit={false}
+                    onSubmitEditing={handleLogin}
+                    ref={passwordRef}
                   />
                 </View>
               </View>
