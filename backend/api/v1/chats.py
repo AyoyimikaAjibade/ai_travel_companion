@@ -151,11 +151,30 @@ def delete_chat(
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """Delete a chat."""
+    chat = chat_service.get_by_id(db, chat_id)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found"
+        )
+    
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
+    
+    if chat.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
     success = chat_service.delete_chat(db, chat_id, current_user.id)
     if not success:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chat not found or not owned by user"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete chat"
         )
     
     return {"message": "Chat deleted successfully"}

@@ -160,6 +160,7 @@ class ChatService(BaseService[Chat]):
     def delete_chat(self, db: Session, chat_id: UUID, user_id: Optional[UUID]) -> bool:
         """
         Delete a chat (only if owned by user).
+        Also deletes related plans and messages.
         
         Args:
             db: Database session
@@ -180,13 +181,41 @@ class ChatService(BaseService[Chat]):
                 return False  # Authenticated user trying to delete anonymous chat
         else:
             # Chat has user_id - must match request user_id
-            if user_id is None or chat.user_id != user_id:
+            # Ensure both are UUID objects for proper comparison
+            if user_id is None:
+                return False
+            if str(chat.user_id) != str(user_id):
                 return False
         
         try:
+            # Delete related plans first to avoid foreign key constraints
+            from repositories.plan_repository import PlanRepository
+            from repositories.chat_message_repository import ChatMessageRepository
+            
+            plan_repo = PlanRepository()
+            message_repo = ChatMessageRepository()
+            
+            # Delete all plans for this chat
+            plans = plan_repo.get_chat_plans(db, chat_id, skip=0, limit=1000)
+            for plan in plans:
+                try:
+                    plan_repo.delete(db, plan.plan_id)
+                except Exception:
+                    pass
+            
+            # Delete all messages for this chat
+            messages = message_repo.get_chat_messages(db, chat_id, skip=0, limit=1000)
+            for message in messages:
+                try:
+                    message_repo.delete(db, message.id)
+                except Exception:
+                    pass
+            
+            # Now delete the chat
             deleted_chat = self.chat_repository.delete(db, chat_id)
             return deleted_chat is not None
-        except Exception:
+        except Exception as e:
+            db.rollback()
             return False
     
     def _generate_share_code(self) -> str:
