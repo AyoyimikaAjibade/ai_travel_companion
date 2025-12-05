@@ -2,9 +2,12 @@
 import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native";
+import { StyleSheet, Platform, Animated } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import {
+  createStackNavigator,
+  TransitionSpecs,
+} from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useFonts } from "expo-font";
 import {
@@ -34,11 +37,12 @@ import SignupScreen from "./src/screens/SignupScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import BookingConfirmationScreen from "./src/screens/BookingConfirmationScreen";
+import AdminScannerScreen from "./src/screens/AdminScannerScreen";
 
 // Icons
 import { MessageCircle, Luggage, Settings } from "lucide-react-native";
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Keep the native splash until fonts are ready
@@ -99,13 +103,58 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator
           initialRouteName="Splash" // 👉 Start at Splash
-          screenOptions={{ headerShown: false }}
+          screenOptions={() => ({
+            headerShown: false,
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+            cardStyle: { backgroundColor: "#070b18" },
+            transitionSpec: {
+              open: TransitionSpecs.TransitionIOSSpec,
+              close: TransitionSpecs.TransitionIOSSpec,
+            },
+            cardStyleInterpolator: ({ current, next, layouts }) => {
+              const progress = Animated.add(
+                current.progress,
+                next ? next.progress : 0
+              );
+              const rotateY = progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: ["24deg", "0deg"],
+              });
+              const translateX = progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [layouts.screen.width * 0.22, 0],
+              });
+              const scale = progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.94, 1],
+              });
+
+              return {
+                cardStyle: {
+                  opacity: progress.interpolate({
+                    inputRange: [0, 0.3, 1],
+                    outputRange: [0.35, 0.7, 1],
+                  }),
+                  transform: [
+                    { perspective: 900 },
+                    { translateX },
+                    { rotateY },
+                    { scale },
+                  ],
+                },
+              };
+            },
+          })}
         >
           {/* Splash -> waits 3s then navigation.replace('Onboarding') */}
           <Stack.Screen name="Splash" component={AppSplashScreen} />
 
           {/* Onboarding (passes setter so it can finish and go to Main) */}
-          <Stack.Screen name="Onboarding">
+          <Stack.Screen
+            name="Onboarding"
+            options={{ animation: "slide_from_right" }}
+          >
             {(props) => (
               <OnboardingScreen
                 {...props}
@@ -115,7 +164,13 @@ export default function App() {
           </Stack.Screen>
 
           {/* Main app (tabs) */}
-          <Stack.Screen name="Main" component={TabNavigator} />
+          <Stack.Screen
+            name="Main"
+            component={TabNavigator}
+            options={{
+              gestureDirection: "vertical",
+            }}
+          />
 
           {/* Details with header shown */}
           <Stack.Screen
@@ -134,10 +189,16 @@ export default function App() {
           <Stack.Screen
             name="ExpediaCheckout"
             component={ExpediaCheckoutClone}
+            options={{
+              gestureDirection: "vertical",
+            }}
           />
           <Stack.Screen
             name="BookingCheckout"
             component={BookingCheckoutClone}
+            options={{
+              gestureDirection: "vertical",
+            }}
           />
           <Stack.Screen name="GenericCheckout" component={GenericCheckout} />
           <Stack.Screen name="Signup" component={SignupScreen} />
@@ -151,6 +212,11 @@ export default function App() {
           <Stack.Screen
             name="BookingConfirmation"
             component={BookingConfirmationScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AdminScanner"
+            component={AdminScannerScreen}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>

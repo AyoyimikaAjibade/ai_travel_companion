@@ -16,7 +16,16 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import Animated, { FadeInDown, FadeInUp, Layout } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  Layout,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { ArrowLeft } from "lucide-react-native";
 import GradientBackground from "../components/GradientBackground";
 import { GRADIENTS, SPACING, COLORS, BORDER_RADIUS } from "../theme";
@@ -46,6 +55,9 @@ const ProfileScreen = ({ navigation }) => {
     newPassword: "",
   });
   const [changingPassword, setChangingPassword] = useState(false);
+  const updateScale = useSharedValue(1);
+  const passwordScale = useSharedValue(1);
+  const haloDrift = useSharedValue(0);
 
   const isDirty = useMemo(() => {
     return (
@@ -114,6 +126,10 @@ const ProfileScreen = ({ navigation }) => {
     }
   }, [sessionUser]);
 
+  useEffect(() => {
+    haloDrift.value = withRepeat(withTiming(1, { duration: 8200 }), -1, true);
+  }, [haloDrift]);
+
   const handleChange = (key) => (value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -175,6 +191,22 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+  const updateBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: updateScale.value }],
+  }));
+
+  const passwordBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: passwordScale.value }],
+  }));
+
+  const haloStyle = useAnimatedStyle(() => {
+    const shift = haloDrift.value * 18 - 9;
+    return {
+      transform: [{ translateY: shift }],
+      opacity: 0.85,
+    };
+  });
+
   return (
     <GradientBackground colors={GRADIENTS.indigo} style={styles.bg}>
       <SafeAreaView style={styles.safe}>
@@ -199,6 +231,7 @@ const ProfileScreen = ({ navigation }) => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            <Animated.View style={[styles.halo, haloStyle]} pointerEvents="none" />
             <Animated.View
               style={styles.header}
               entering={FadeInDown.duration(320)}
@@ -292,21 +325,25 @@ const ProfileScreen = ({ navigation }) => {
                     </View>
                   </View>
 
-                  <TouchableOpacity
-                    onPress={handleUpdate}
-                    style={[
-                      styles.updateBtn,
-                      (!isDirty || saving) && styles.updateBtnDisabled,
-                    ]}
-                    activeOpacity={0.85}
-                    disabled={!isDirty || saving}
-                  >
-                    {saving ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.updateText}>Update profile</Text>
-                    )}
-                  </TouchableOpacity>
+                  <Animated.View style={updateBtnStyle}>
+                    <TouchableOpacity
+                      onPress={handleUpdate}
+                      style={[
+                        styles.updateBtn,
+                        (!isDirty || saving) && styles.updateBtnDisabled,
+                      ]}
+                      activeOpacity={0.85}
+                      disabled={!isDirty || saving}
+                      onPressIn={() => (updateScale.value = withSpring(0.97, { damping: 14 }))}
+                      onPressOut={() => (updateScale.value = withSpring(1, { damping: 14 }))}
+                    >
+                      {saving ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.updateText}>Update profile</Text>
+                      )}
+                    </TouchableOpacity>
+                  </Animated.View>
 
                   <View style={styles.divider} />
 
@@ -340,22 +377,26 @@ const ProfileScreen = ({ navigation }) => {
                     />
                   </View>
 
-                  <TouchableOpacity
-                    onPress={handlePasswordChange}
-                    style={[
-                      styles.updateBtn,
-                      (!canChangePassword || changingPassword) &&
-                        styles.updateBtnDisabled,
-                    ]}
-                    activeOpacity={0.85}
-                    disabled={!canChangePassword || changingPassword}
-                  >
-                    {changingPassword ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.updateText}>Update password</Text>
-                    )}
-                  </TouchableOpacity>
+                  <Animated.View style={passwordBtnStyle}>
+                    <TouchableOpacity
+                      onPress={handlePasswordChange}
+                      style={[
+                        styles.updateBtn,
+                        (!canChangePassword || changingPassword) &&
+                          styles.updateBtnDisabled,
+                      ]}
+                      activeOpacity={0.85}
+                      disabled={!canChangePassword || changingPassword}
+                      onPressIn={() => (passwordScale.value = withSpring(0.97, { damping: 14 }))}
+                      onPressOut={() => (passwordScale.value = withSpring(1, { damping: 14 }))}
+                    >
+                      {changingPassword ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.updateText}>Update password</Text>
+                      )}
+                    </TouchableOpacity>
+                  </Animated.View>
                 </>
               )}
             </Animated.View>
@@ -459,6 +500,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontFamily: "Urbanist_600SemiBold",
     fontSize: 16,
+  },
+  halo: {
+    position: "absolute",
+    top: -120,
+    left: -80,
+    right: -80,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "rgba(124,58,237,0.24)",
   },
 });
 

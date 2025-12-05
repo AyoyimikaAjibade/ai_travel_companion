@@ -123,14 +123,22 @@ export const createBookingRecord = ({
         )
         .filter(Boolean)
     : [];
+
   const qrPayload = {
     bookingId,
     serviceKey,
     serviceType: safeType,
     provider,
-    amount,
-    currency,
+    status: "confirmed",
     confirmedAt,
+    batchId,
+    amounts: {
+      total: amount,
+      subtotal,
+      taxes,
+      twosFee,
+      currency,
+    },
     traveler: traveler
       ? {
           name: traveler.name,
@@ -139,8 +147,19 @@ export const createBookingRecord = ({
           countryCode: traveler.countryCode,
         }
       : null,
-    passengers: passengerNames,
+    passengers: Array.isArray(passengers)
+      ? passengers.map((p) => ({
+          firstName: p?.firstName ?? null,
+          lastName: p?.lastName ?? null,
+          type: p?.type ?? null,
+          age: p?.age ?? null,
+          seat: p?.seat ?? null,
+          document: p?.document ?? null,
+        }))
+      : [],
+    passengerNames,
     cabinClass,
+    data: data || {},
   };
 
   return {

@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import QRCode from "react-native-qrcode-svg";
 import { COLORS, SPACING, BORDER_RADIUS } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { useSavedChatsStore } from "../stores/savedChatsStore";
@@ -16,51 +17,6 @@ import {
   getActiveBookings,
 } from "../utils/booking";
 import { ChevronLeft, MessageCircle, Luggage } from "lucide-react-native";
-
-const QR_SIZE = 12;
-
-const generateQrMatrix = (value, size = QR_SIZE) => {
-  const source =
-    typeof value === "string" && value.length
-      ? value
-      : "ai-travel-companion";
-  const bytes = Array.from(source).map((char) => char.charCodeAt(0));
-  const totalCells = size * size;
-  const bits = [];
-
-  bytes.forEach((byte, index) => {
-    for (let shift = 0; shift < 8; shift += 1) {
-      const rotated = (shift + index) % 8;
-      const bit = (byte >> rotated) & 1;
-      bits.push(bit);
-    }
-  });
-
-  while (bits.length < totalCells) {
-    bits.push((bits.length + bytes.length) % 2);
-  }
-
-  const matrix = [];
-  for (let row = 0; row < size; row += 1) {
-    matrix.push(bits.slice(row * size, (row + 1) * size));
-  }
-  return matrix;
-};
-
-const renderQrMatrix = (matrix) => (
-  <View style={styles.qrContainer}>
-    {matrix.map((row, rowIndex) => (
-      <View key={`qr-row-${rowIndex}`} style={styles.qrRow}>
-        {row.map((bit, cellIndex) => (
-          <View
-            key={`qr-cell-${rowIndex}-${cellIndex}`}
-            style={[styles.qrCell, bit ? styles.qrCellFilled : null]}
-          />
-        ))}
-      </View>
-    ))}
-  </View>
-);
 
 const formatDate = (value) => {
   if (!value) return "";
@@ -133,14 +89,17 @@ export default function BookingConfirmationScreen({ route, navigation }) {
 
   const activeRecords = useMemo(() => getActiveBookings(ledger), [ledger]);
 
+  const ALL_KEY = "__all_bookings__";
+
   const [selectedKey, setSelectedKey] = React.useState(
     initialServiceKey ||
       activeRecords[0]?.serviceKey ||
       records[0]?.serviceKey ||
-      null
+      ALL_KEY
   );
 
   React.useEffect(() => {
+    if (selectedKey === ALL_KEY) return;
     const current = selectedKey ? ledger.records[selectedKey] : null;
     if (current) return;
 
@@ -175,13 +134,168 @@ export default function BookingConfirmationScreen({ route, navigation }) {
 
   const selectedRecord = selectedKey ? ledger.records[selectedKey] : null;
 
-  const qrMatrix = useMemo(
-    () =>
-      generateQrMatrix(
-        selectedRecord?.qrData ?? selectedRecord?.bookingId ?? ""
-      ),
-    [selectedRecord]
-  );
+  const allSummaryValue = useMemo(() => {
+    try {
+      const records = Object.values(ledger.records || {}).filter(
+        (r) => r && r.status !== "cancelled"
+      );
+
+      const firstFlight = records.find((r) => r.serviceType === "flight");
+      const firstHotel = records.find((r) => r.serviceType === "hotel");
+      const attractions = records.filter((r) => r.serviceType === "attraction");
+      const car = records.find((r) => r.serviceType === "car");
+
+      const flightPassengers =
+        firstFlight && Array.isArray(firstFlight.passengers)
+          ? firstFlight.passengers
+              .map((p) =>
+                [p?.firstName, p?.lastName].filter(Boolean).join(" ").trim()
+              )
+              .filter(Boolean)
+          : [];
+
+      const flight = firstFlight
+        ? {
+            airline_name: firstFlight.provider,
+            price_per_person: firstFlight.amount
+              ? Number(firstFlight.amount) / Math.max(flightPassengers.length || 1, 1)
+              : null,
+            departure_time:
+              firstFlight.data?.departure_time ||
+              firstFlight.data?.departureTime ||
+              firstFlight.data?.departure ||
+              firstFlight.confirmedAt,
+            arrival_time:
+              firstFlight.data?.arrival_time ||
+              firstFlight.data?.arrivalTime ||
+              firstFlight.data?.arrival ||
+              null,
+            passenger_names: flightPassengers,
+            amount_paid: firstFlight.amount ?? null,
+            status: firstFlight.status === "cancelled" ? "Cancelled" : "Booked",
+            payment_method:
+              firstFlight.data?.payment_method ||
+              firstFlight.data?.paymentMethod ||
+              "Credit Card",
+          }
+        : undefined;
+
+      const hotel = firstHotel
+        ? {
+            name: firstHotel.provider || firstHotel.data?.name,
+            rating: firstHotel.data?.rating ?? null,
+            total_price: firstHotel.amount ?? null,
+            price_per_night: firstHotel.data?.price_per_night || firstHotel.data?.pricePerNight || null,
+            currency: firstHotel.currency || firstHotel.data?.currency || "USD",
+          }
+        : undefined;
+
+      const carRental = car
+        ? {
+            provider: car.provider,
+            total_price: car.amount ?? null,
+            pickup: car.data?.pickup_time || car.data?.pickup || car.confirmedAt,
+            dropoff: car.data?.dropoff_time || car.data?.dropoff || null,
+            status: car.status === "cancelled" ? "Cancelled" : "Booked",
+          }
+        : undefined;
+
+      const attractionList = attractions.map((a) => ({
+        name: a.provider || a.data?.name || "Attraction",
+        price: a.amount ?? a.data?.price ?? null,
+        currency: a.currency || a.data?.currency || "USD",
+      }));
+
+      const totalPrice = records.reduce(
+        (sum, r) => (typeof r.amount === "number" ? sum + r.amount : sum),
+        0
+      );
+
+      const payload = {
+        flight,
+        hotel,
+        car: carRental,
+        attractions: attractionList.length ? attractionList : undefined,
+        total_price: totalPrice || null,
+        status: records.length ? "Booked" : "Empty",
+      };
+
+      // Remove undefined to keep payload small
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === undefined) delete payload[key];
+      });
+
+      let encoded = JSON.stringify(payload);
+      if (encoded.length > 1400 && payload.attractions?.length) {
+        payload.attractions = payload.attractions.slice(0, 2);
+        encoded = JSON.stringify(payload);
+      }
+      return encoded;
+    } catch (err) {
+      return "";
+    }
+  }, [ledger]);
+
+  const qrValue = useMemo(() => {
+    if (!selectedRecord) return "";
+    const dataEntries = Object.entries(selectedRecord.data || {})
+      .filter(
+        ([, v]) =>
+          typeof v === "string" ||
+          typeof v === "number" ||
+          typeof v === "boolean"
+      )
+      .slice(0, 8)
+      .map(([k, v]) => [k.slice(0, 32), String(v).slice(0, 80)]);
+
+    const passengers =
+      Array.isArray(selectedRecord?.passengers) && selectedRecord.passengers.length
+        ? selectedRecord.passengers.slice(0, 6).map((p) => ({
+            n: [p?.firstName, p?.lastName].filter(Boolean).join(" ").trim(),
+            t: p?.type,
+            a: p?.age,
+          }))
+        : [];
+
+    const compact = {
+      t: "twos-booking",
+      v: 2,
+      id: selectedRecord.bookingId,
+      sk: selectedRecord.serviceKey,
+      st: selectedRecord.serviceType,
+      p: selectedRecord.provider,
+      s: selectedRecord.status === "cancelled" ? "cancelled" : "booked",
+      cAt: selectedRecord.confirmedAt,
+      amt: {
+        total: selectedRecord.amount,
+        subtotal: selectedRecord.subtotal,
+        taxes: selectedRecord.taxes,
+        twosFee: selectedRecord.twosFee,
+        currency: selectedRecord.currency,
+      },
+      tr: selectedRecord?.traveler
+        ? {
+            n: selectedRecord.traveler.name,
+            e: selectedRecord.traveler.email,
+            ph: selectedRecord.traveler.phone,
+            cc: selectedRecord.traveler.countryCode,
+          }
+        : null,
+      pax: passengers,
+      d: dataEntries,
+    };
+
+    try {
+      let encoded = JSON.stringify(compact);
+      if (encoded.length > 1400) {
+        const smaller = { ...compact, d: dataEntries.slice(0, 3), pax: passengers.slice(0, 3) };
+        encoded = JSON.stringify(smaller);
+      }
+      return encoded;
+    } catch (err) {
+      return String(selectedRecord?.bookingId ?? "");
+    }
+  }, [selectedRecord]);
 
   const isSelectedCancelled = selectedRecord?.status === "cancelled";
   const hasActive = activeRecords.length > 0;
@@ -240,12 +354,12 @@ export default function BookingConfirmationScreen({ route, navigation }) {
 
   const goToTrips = () => navigation.navigate("Main", { screen: "MyTrips" });
 
-  const renderStatusBadge = (record) => {
-    if (!record) return null;
-    const status = record.status === "cancelled" ? "Cancelled" : "Confirmed";
-    const badgeStyles =
-      record.status === "cancelled"
-        ? [styles.statusBadge, styles.statusBadgeCancelled]
+const renderStatusBadge = (record) => {
+  if (!record) return null;
+  const status = record.status === "cancelled" ? "Cancelled" : "Booked";
+  const badgeStyles =
+    record.status === "cancelled"
+      ? [styles.statusBadge, styles.statusBadgeCancelled]
         : [styles.statusBadge, styles.statusBadgeConfirmed];
     const textStyles =
       record.status === "cancelled"
@@ -286,6 +400,43 @@ export default function BookingConfirmationScreen({ route, navigation }) {
             </View>
           ) : (
             <View style={styles.selectorList}>
+              <TouchableOpacity
+                style={[
+                  styles.bookingChip,
+                  selectedKey === ALL_KEY && styles.bookingChipActive,
+                ]}
+                onPress={() => setSelectedKey(ALL_KEY)}
+                activeOpacity={0.88}
+              >
+                <View style={styles.bookingChipHeader}>
+                  <Text
+                    style={[
+                      styles.bookingChipTitle,
+                      selectedKey === ALL_KEY && styles.bookingChipTitleActive,
+                    ]}
+                  >
+                    All in one
+                  </Text>
+                  <View style={[styles.statusBadge, styles.statusBadgeConfirmed]}>
+                    <Text style={[styles.statusBadgeText, styles.statusBadgeTextConfirmed]}>
+                      SUMMARY
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.bookingChipSubtitle,
+                    selectedKey === ALL_KEY && styles.bookingChipSubtitleActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  Flight, hotel, car, attractions
+                </Text>
+                <Text style={styles.bookingChipDate}>
+                  {new Date().toLocaleString()}
+                </Text>
+              </TouchableOpacity>
+
               {records.map((record) => {
                 const isActive = record.serviceKey === selectedKey;
                 return (
@@ -328,7 +479,65 @@ export default function BookingConfirmationScreen({ route, navigation }) {
           )}
         </View>
 
-        {selectedRecord ? (
+        {/* {allSummaryValue ? (
+          <View style={styles.allQrCard}>
+            <View style={styles.allQrHeader}>
+              <Text style={styles.sect/>ionTitle}>All bookings</Text>
+              <Text style={styles.allQrBadge}>
+                {Object.keys(ledger.records || {}).length} included
+              </Text>
+            </View>
+            <Text style={styles.allQrSubtitle}>
+              Share this once for flight, hotel, car, and attractions.
+            </Text>
+            <View style={styles.qrWrapper}>
+              <QRCode
+                value={allSummaryValue}
+                size={180}
+                backgroundColor="transparent"
+                color="#fff"
+                enableLinearGradient={false}
+                quietZone={8}
+                ecl="M"
+              />
+            </View>
+            <Text style={styles.qrHint}>
+              Admin can scan this to see every booking in your trip.
+            </Text>
+          </View>
+        ) : null} */}
+
+        {selectedKey === ALL_KEY ? (
+          allSummaryValue ? (
+            <View style={styles.cardPrimary}>
+              <Text style={styles.cardTitle}>All bookings QR</Text>
+              <Text style={styles.cardSubtitle}>
+                Scan once for flight, hotel, car, and attractions.
+              </Text>
+              <View style={styles.qrWrapper}>
+                <QRCode
+                  value={allSummaryValue}
+                  size={200}
+                  backgroundColor="transparent"
+                  color="#fff"
+                  enableLinearGradient={false}
+                  quietZone={8}
+                  ecl="M"
+                />
+              </View>
+              <Text style={styles.qrHint}>
+                Admin can scan this to view the combined summary.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No combined data</Text>
+              <Text style={styles.emptySubtitle}>
+                Confirm a booking to generate the all-in-one QR.
+              </Text>
+            </View>
+          )
+        ) : selectedRecord ? (
           <>
             <View style={styles.cardPrimary}>
               <Text style={styles.cardTitle}>
@@ -345,10 +554,33 @@ export default function BookingConfirmationScreen({ route, navigation }) {
                     ).toLowerCase()}.`}
               </Text>
               {renderStatusBadge(selectedRecord)}
-              {renderQrMatrix(qrMatrix)}
+              <View style={styles.qrWrapper}>
+                {qrValue ? (
+                  <QRCode
+                    value={qrValue}
+                    size={200}
+                    backgroundColor="transparent"
+                    color="#fff"
+                    enableLinearGradient={false}
+                    quietZone={8}
+                    ecl="M"
+                  />
+                ) : (
+                  <View style={styles.qrFallback}>
+                    <Text style={styles.qrFallbackText}>
+                      QR unavailable
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.qrHint}>
                 Scan to retrieve booking #{selectedRecord.bookingId}.
               </Text>
+              {!!qrValue && (
+                <Text style={styles.qrMeta}>
+                  Encoded {qrValue.length} characters of booking data.
+                </Text>
+              )}
             </View>
 
             <View style={styles.summaryCard}>
@@ -578,31 +810,46 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.75)",
     marginTop: SPACING.xs,
   },
-  qrContainer: {
+  qrWrapper: {
     marginTop: SPACING.lg,
     padding: SPACING.md,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: BORDER_RADIUS.lg,
     alignSelf: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
   },
-  qrRow: {
-    flexDirection: "row",
+  pdfWrapper: {
+    display: "none",
   },
-  qrCell: {
-    width: 14,
-    height: 14,
-    margin: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 2,
+  qrFallback: {
+    width: 200,
+    height: 200,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.04)",
   },
-  qrCellFilled: {
-    backgroundColor: "#fff",
+  qrFallbackText: {
+    color: "rgba(255,255,255,0.6)",
+    fontFamily: "Urbanist_600SemiBold",
   },
   qrHint: {
     color: "rgba(255,255,255,0.6)",
     fontSize: 12,
     textAlign: "center",
     marginTop: SPACING.md,
+  },
+  qrMeta: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
   },
   summaryCard: {
     backgroundColor: "rgba(255,255,255,0.04)",
@@ -667,6 +914,37 @@ const styles = StyleSheet.create({
   bookingChipDate: {
     color: "rgba(255,255,255,0.5)",
     fontSize: 12,
+  },
+  allQrCard: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.35)",
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  allQrHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.xs,
+  },
+  allQrBadge: {
+    color: "#c4b5fd",
+    fontFamily: "Urbanist_600SemiBold",
+    fontSize: 12,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.4)",
+  },
+  allQrSubtitle: {
+    color: "rgba(255,255,255,0.75)",
+    marginBottom: SPACING.sm,
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,

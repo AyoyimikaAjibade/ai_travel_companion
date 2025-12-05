@@ -16,7 +16,16 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  Layout,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { formatDistanceToNow } from "date-fns";
 import { Pencil, Trash2, MessageCircle } from "lucide-react-native";
 import EmptyState from "../components/EmptyState";
@@ -69,6 +78,7 @@ const MyTripsScreen = ({ navigation }) => {
   const [refreshAnimKey, setRefreshAnimKey] = useState(0);
   const [syncingChatId, setSyncingChatId] = useState(null);
   const refreshLottieRef = useRef(null);
+  const bgDrift = useSharedValue(0);
 
   useEffect(() => {
     const persist = useSavedChatsStore.persist;
@@ -200,9 +210,45 @@ const MyTripsScreen = ({ navigation }) => {
     }
   }, [refreshing, refreshAnimKey]);
 
+  const bgLayerStyle = useAnimatedStyle(() => {
+    const shift = (bgDrift.value || 0) * 12;
+    return {
+      transform: [{ translateY: shift - 6 }],
+    };
+  });
+
   useEffect(() => {
     hydrateRemoteChats();
   }, [hydrateRemoteChats]);
+
+  useEffect(() => {
+    bgDrift.value = withRepeat(
+      withTiming(1, { duration: 9000 }),
+      -1,
+      true
+    );
+  }, [bgDrift]);
+
+  const ContinueButton = ({ onPress, children }) => {
+    const scale = useSharedValue(1);
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }],
+    }));
+
+    return (
+      <Animated.View style={animatedStyle}>
+        <TouchableOpacity
+          style={styles.continueBtn}
+          onPress={onPress}
+          activeOpacity={0.88}
+          onPressIn={() => (scale.value = withSpring(0.97, { damping: 14 }))}
+          onPressOut={() => (scale.value = withSpring(1, { damping: 14 }))}
+        >
+          {children}
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   const sections = useMemo(() => {
     if (!Array.isArray(chats)) return [];
@@ -420,16 +466,12 @@ const MyTripsScreen = ({ navigation }) => {
           <Text style={styles.bookingAmount}>Total paid: {amountLabel}</Text>
         )}
 
-        <TouchableOpacity
-          style={styles.continueBtn}
-          onPress={() => handleContinue(item)}
-          activeOpacity={0.88}
-        >
+        <ContinueButton onPress={() => handleContinue(item)}>
           <MessageCircle size={18} color="#fff" />
           <Text style={styles.continueText}>
             {hasAnyBookings ? "View bookings" : "Continue chat"}
           </Text>
-        </TouchableOpacity>
+        </ContinueButton>
       </Animated.View>
     );
   };
@@ -455,6 +497,14 @@ const MyTripsScreen = ({ navigation }) => {
           { paddingTop: insets.top ? SPACING.sm : SPACING.lg },
         ]}
       >
+        <View style={styles.bgParallax} pointerEvents="none">
+          <Animated.View
+            style={[styles.bgOrb, styles.bgOrbLeft, bgLayerStyle]}
+          />
+          <Animated.View
+            style={[styles.bgOrb, styles.bgOrbRight, bgLayerStyle]}
+          />
+        </View>
         {refreshing && (
           <View pointerEvents="none" style={styles.refreshOverlay}>
             <LottieView
@@ -505,7 +555,13 @@ const MyTripsScreen = ({ navigation }) => {
             renderItem={renderTrip}
             keyExtractor={(item) => item.id}
             renderSectionHeader={({ section }) => (
-              <Text style={styles.sectionHeader}>{section.title}</Text>
+              <Animated.Text
+                entering={FadeInDown.duration(260)}
+                layout={Layout.springify()}
+                style={styles.sectionHeader}
+              >
+                {section.title}
+              </Animated.Text>
             )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
@@ -754,6 +810,30 @@ const styles = StyleSheet.create({
   hiddenRefresh: {
     height: 0.001,
     opacity: 0,
+  },
+  bgParallax: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 320,
+    overflow: "hidden",
+  },
+  bgOrb: {
+    position: "absolute",
+    width: 380,
+    height: 380,
+    borderRadius: 190,
+    backgroundColor: "rgba(59,130,246,0.16)",
+  },
+  bgOrbLeft: {
+    top: -140,
+    left: -120,
+  },
+  bgOrbRight: {
+    top: 80,
+    right: -160,
+    backgroundColor: "rgba(244,114,182,0.14)",
   },
 });
 

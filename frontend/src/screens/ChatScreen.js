@@ -1,5 +1,5 @@
 // src/screens/ChatScreen.js
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   TextInput,
@@ -11,6 +11,8 @@ import {
   Text,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  Easing,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Send, Plus, Keyboard as KeyboardIcon } from "lucide-react-native";
@@ -131,6 +133,101 @@ const QUICK_CHIPS = [
 
 const TYPING_MIN_MS = 1500;
 
+const AnimatedMessageBubble = ({ children, delay = 0 }) => {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 240,
+        delay,
+        useNativeDriver: true,
+      }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        speed: 10,
+        bounciness: 6,
+        delay,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [delay, opacity, translateY]);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      {children}
+    </Animated.View>
+  );
+};
+
+/* Subtle ambient animation so the chat never feels static */
+const FloatingBackdrop = () => {
+  const orbs = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  useEffect(() => {
+    orbs.forEach((value, idx) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 2400 + idx * 300,
+            delay: idx * 400,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 2400 + idx * 300,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+        { resetBeforeIteration: true }
+      ).start();
+    });
+  }, [orbs]);
+
+  const positions = [
+    { top: 24, left: 24 },
+    { top: 180, right: 20 },
+    { top: 340, left: 54 },
+  ];
+
+  return (
+    <View style={styles.ambientWrap} pointerEvents="none">
+      {orbs.map((value, idx) => {
+        const translateY = value.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-8 - idx * 2, 10 + idx * 2],
+        });
+        const opacity = value.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.18, 0.5],
+        });
+        return (
+          <Animated.View
+            key={idx}
+            style={[
+              styles.ambientOrb,
+              positions[idx],
+              {
+                opacity,
+                transform: [{ translateY }],
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+};
+
 /* ===== Helpers: local NLU & intents ===== */
 const normalize = (s = "") =>
   s.toString().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
@@ -184,6 +281,9 @@ class ChatScreenClass extends React.Component {
     this.keyboardShowListener = null;
     this.keyboardHideListener = null;
     this.handleStoreChange = this.handleStoreChange.bind(this);
+    this.sendScale = new Animated.Value(1);
+    this.newChatScale = new Animated.Value(1);
+    this.suggestionPulse = new Animated.Value(0);
   }
 
   componentDidMount() {
@@ -209,6 +309,22 @@ class ChatScreenClass extends React.Component {
       hideEvent,
       this.handleKeyboardHide
     );
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(this.suggestionPulse, {
+          toValue: 1,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(this.suggestionPulse, {
+          toValue: 0,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+      ]),
+      { resetBeforeIteration: true }
+    ).start();
   }
 
   componentDidUpdate(prevProps, prevState) {
@@ -260,6 +376,20 @@ class ChatScreenClass extends React.Component {
       this.setState({ isKeyboardVisible: false });
     }
   };
+
+  animateScale = (value, toValue = 1) => {
+    Animated.spring(value, {
+      toValue,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 180,
+    }).start();
+  };
+
+  handleSendPressIn = () => this.animateScale(this.sendScale, 0.94);
+  handleSendPressOut = () => this.animateScale(this.sendScale, 1);
+  handleNewChatPressIn = () => this.animateScale(this.newChatScale, 0.94);
+  handleNewChatPressOut = () => this.animateScale(this.newChatScale, 1);
 
   dismissKeyboard = () => {
     Keyboard.dismiss();
@@ -697,16 +827,18 @@ class ChatScreenClass extends React.Component {
   renderMessage = ({ item }) => {
     if (item.isTyping) return <MessageBubble role="bot" isTyping />;
     return (
-      <MessageBubble
-        role={item.role}
-        text={item.text}
-        time={item.timestamp}
-        links={item.links}
-        plan={item.plan}
-        navigation={this.props.navigation}
-        chatId={this.currentChatId}
-        booking={this.state.booking}
-      />
+      <AnimatedMessageBubble delay={40}>
+        <MessageBubble
+          role={item.role}
+          text={item.text}
+          time={item.timestamp}
+          links={item.links}
+          plan={item.plan}
+          navigation={this.props.navigation}
+          chatId={this.currentChatId}
+          booking={this.state.booking}
+        />
+      </AnimatedMessageBubble>
     );
   };
 
@@ -716,6 +848,15 @@ class ChatScreenClass extends React.Component {
     const firstMissing = missing[0];
     const options = PREFILL_OPTIONS[firstMissing] || [];
     if (!options || options.length === 0) return null;
+
+    const scale = this.suggestionPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 1.04],
+    });
+    const opacity = this.suggestionPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0.92],
+    });
 
     return (
       <View style={styles.suggestionWrap}>
@@ -730,18 +871,25 @@ class ChatScreenClass extends React.Component {
             <Text style={styles.dismissText}>✕</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.suggestionRow}>
+        <Animated.View
+          style={[styles.suggestionRow, { transform: [{ scale }], opacity }]}
+        >
           {options.map((opt, idx) => (
-            <TouchableOpacity
+            <Animated.View
               key={idx}
-              style={styles.suggestionChip}
-              onPress={() => this.handleSuggestionTap(opt)}
-              activeOpacity={0.85}
+              style={{ transform: [{ scale }] }}
+              entering={undefined}
             >
-              <Text style={styles.suggestionText}>{opt}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.suggestionChip}
+                onPress={() => this.handleSuggestionTap(opt)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.suggestionText}>{opt}</Text>
+              </TouchableOpacity>
+            </Animated.View>
           ))}
-        </View>
+        </Animated.View>
       </View>
     );
   };
@@ -757,16 +905,21 @@ class ChatScreenClass extends React.Component {
           keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
         >
           <View style={styles.container}>
+            <FloatingBackdrop />
             <View style={styles.headerBar}>
               <Text style={styles.headerTitle}>Plan a trip</Text>
-              <TouchableOpacity
-                style={styles.newChatBtn}
-                onPress={this.handleNewChat}
-                activeOpacity={0.88}
-              >
-                <Plus size={18} color="#fff" />
-                <Text style={styles.newChatText}>New chat</Text>
-              </TouchableOpacity>
+              <Animated.View style={{ transform: [{ scale: this.newChatScale }] }}>
+                <TouchableOpacity
+                  style={styles.newChatBtn}
+                  onPress={this.handleNewChat}
+                  activeOpacity={0.88}
+                  onPressIn={this.handleNewChatPressIn}
+                  onPressOut={this.handleNewChatPressOut}
+                >
+                  <Plus size={18} color="#fff" />
+                  <Text style={styles.newChatText}>New chat</Text>
+                </TouchableOpacity>
+              </Animated.View>
             </View>
 
             {messages.length === 0 ? (
@@ -831,19 +984,24 @@ class ChatScreenClass extends React.Component {
                     <KeyboardIcon size={18} color={COLORS.textMuted} />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  onPress={this.handleSend}
-                  style={[
-                    styles.sendButton,
-                    isTyping && styles.sendButtonDisabled,
-                  ]}
-                  disabled={isTyping}
-                >
-                  <Send
-                    size={24}
-                    color={isTyping ? COLORS.textMuted : COLORS.primary}
-                  />
-                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ scale: this.sendScale }] }}>
+                  <TouchableOpacity
+                    onPress={this.handleSend}
+                    style={[
+                      styles.sendButton,
+                      isTyping && styles.sendButtonDisabled,
+                    ]}
+                    disabled={isTyping}
+                    onPressIn={this.handleSendPressIn}
+                    onPressOut={this.handleSendPressOut}
+                    activeOpacity={0.9}
+                  >
+                    <Send
+                      size={24}
+                      color={isTyping ? COLORS.textMuted : COLORS.primary}
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
               </View>
             </SafeAreaView>
           </View>
@@ -858,6 +1016,21 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   keyboardAvoider: { flex: 1 },
   container: { flex: 1, backgroundColor: COLORS.background },
+  ambientWrap: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: "hidden",
+  },
+  ambientOrb: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 90,
+    backgroundColor: "rgba(99,102,241,0.14)",
+  },
   headerBar: {
     flexDirection: "row",
     alignItems: "center",

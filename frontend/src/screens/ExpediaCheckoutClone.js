@@ -1,5 +1,5 @@
 // src/screens/ExpediaCheckoutClone.js
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,14 +9,26 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeInDown, FadeInUp, Layout } from "react-native-reanimated";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  Layout,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
-import PassengersForm, {
-  createPassenger,
-} from "../components/PassengersForm";
+import PassengersForm, { createPassenger } from "../components/PassengersForm";
 import { usePremiumAlert } from "../components/PremiumAlert";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 
@@ -221,6 +233,9 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
   const slots = route.params?.currentSlots || {};
   const routeLabel = getRouteLabel(data, slots);
   const flightType = data?.flight_type ?? data?.type ?? "Non-stop";
+  const payScale = useSharedValue(1);
+  const cardDrift = useSharedValue(0);
+  const scrollY = useSharedValue(0);
   const [traveler, setTraveler] = useState({
     name: data.traveler ?? "",
     email: data.email ?? "",
@@ -239,6 +254,39 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
       p.lastName.trim().length > 0
   );
   const [showPremiumAlert, premiumAlert] = usePremiumAlert();
+
+  useEffect(() => {
+    cardDrift.value = withRepeat(
+      withSequence(
+        withTiming(-3, { duration: 1300 }),
+        withTiming(3, { duration: 1300 })
+      ),
+      -1,
+      true
+    );
+  }, [cardDrift]);
+
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  const tripCardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: cardDrift.value }],
+  }));
+
+  const payBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: payScale.value }],
+  }));
+
+  const glowStyleTop = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollY.value * -0.14 }],
+    opacity: 0.55,
+  }));
+
+  const glowStyleBottom = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollY.value * 0.12 }, { scale: 1.02 }],
+    opacity: 0.45,
+  }));
 
   const handlePay = () => {
     if (!travelerValid) {
@@ -289,7 +337,10 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <Animated.View style={styles.topBar} entering={FadeInDown.duration(260)}>
+        <Animated.View
+          style={styles.topBar}
+          entering={FadeInDown.duration(260)}
+        >
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation.goBack()}
@@ -301,16 +352,26 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
           <View style={{ width: 36 }} />
         </Animated.View>
 
-        <ScrollView
+        <Animated.ScrollView
           contentContainerStyle={[
             styles.scroll,
             { paddingBottom: insets.bottom + 280 + 3 },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         >
+          <View style={styles.parallaxBg} pointerEvents="none">
+            <Animated.View
+              style={[styles.glow, styles.glowTop, glowStyleTop]}
+            />
+            <Animated.View
+              style={[styles.glow, styles.glowBottom, glowStyleBottom]}
+            />
+          </View>
           <Animated.View
-            style={styles.tripCard}
+            style={[styles.tripCard, tripCardStyle]}
             entering={FadeInDown.delay(40)}
             layout={Layout.springify().damping(16)}
           >
@@ -335,7 +396,9 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
               </View>
             </View>
             {durationLabel && (
-              <Text style={styles.durationText}>{`Duration: ${durationLabel}`}</Text>
+              <Text
+                style={styles.durationText}
+              >{`Duration: ${durationLabel}`}</Text>
             )}
             <View style={styles.badgeRow}>
               <ShieldCheck size={16} color="#1c4ed8" />
@@ -353,12 +416,16 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
               <SummaryRow
                 key={passenger.id ?? `passenger-${index}`}
                 label={`Passenger ${index + 1}`}
-                value={`${passenger.firstName ?? ""} ${
-                  passenger.lastName ?? ""
-                }`.trim() || "—"}
+                value={
+                  `${passenger.firstName ?? ""} ${
+                    passenger.lastName ?? ""
+                  }`.trim() || "—"
+                }
               />
             ))}
-            <Text style={styles.cabinHint}>{`Max passengers: ${maxPassengers}`}</Text>
+            <Text
+              style={styles.cabinHint}
+            >{`Max passengers: ${maxPassengers}`}</Text>
           </Animated.View>
 
           <Animated.View
@@ -400,68 +467,83 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
             </Text>
           </Animated.View>
 
-        <Animated.View
-          style={styles.summaryCard}
-          entering={FadeInDown.delay(180)}
-          layout={Layout.springify().damping(16)}
-        >
-          <Text style={styles.sectionLabel}>Price summary</Text>
-          <SummaryRow
-            label={`Fare (${passengerCount} × ${pricePerPassengerLabel})`}
-            value={baseFareLabel}
-          />
-          {upgradeLabel ? (
-            <SummaryRow label="Cabin upgrade" value={upgradeLabel} />
-          ) : null}
-          <SummaryRow
-            label="Taxes & fees"
-            value={formatCurrency(taxes, displayCurrency)}
-          />
-          <SummaryRow
-            label="TWOS service fee (5%)"
-            value={formatCurrency(twosFee, displayCurrency)}
-          />
-          <SummaryRow
-            label="Total due"
-            value={formatCurrency(total, displayCurrency)}
-            bold
-          />
-        </Animated.View>
+          <Animated.View
+            style={styles.summaryCard}
+            entering={FadeInDown.delay(180)}
+            layout={Layout.springify().damping(16)}
+          >
+            <Text style={styles.sectionLabel}>Price summary</Text>
+            <SummaryRow
+              label={`Fare (${passengerCount} × ${pricePerPassengerLabel})`}
+              value={baseFareLabel}
+            />
+            {upgradeLabel ? (
+              <SummaryRow label="Cabin upgrade" value={upgradeLabel} />
+            ) : null}
+            <SummaryRow
+              label="Taxes & fees"
+              value={formatCurrency(taxes, displayCurrency)}
+            />
+            <SummaryRow
+              label="TWOS service fee (5%)"
+              value={formatCurrency(twosFee, displayCurrency)}
+            />
+            <SummaryRow
+              label="Total due"
+              value={formatCurrency(total, displayCurrency)}
+              bold
+            />
+          </Animated.View>
 
-        <Animated.View
-          style={styles.passengerCard}
-          entering={FadeInDown.delay(220)}
-          layout={Layout.springify().damping(16)}
-        >
-          <Text style={styles.sectionLabel}>Passengers</Text>
-          <PassengersForm
-            value={passengers}
-            onChange={setPassengers}
-            maxCount={maxPassengers}
-          />
-        </Animated.View>
+          <Animated.View
+            style={styles.passengerCard}
+            entering={FadeInDown.delay(220)}
+            layout={Layout.springify().damping(16)}
+          >
+            <Text style={styles.sectionLabel}>Passengers</Text>
+            <PassengersForm
+              value={passengers}
+              onChange={setPassengers}
+              maxCount={maxPassengers}
+            />
+          </Animated.View>
 
-        <Animated.View
-          style={styles.summaryCard}
-          entering={FadeInDown.delay(260)}
-          layout={Layout.springify().damping(16)}
-        >
-          <Text style={styles.sectionLabel}>Traveler contact</Text>
-          <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
-        </Animated.View>
+          <Animated.View
+            style={styles.summaryCard}
+            entering={FadeInDown.delay(260)}
+            layout={Layout.springify().damping(16)}
+          >
+            <Text style={styles.sectionLabel}>Traveler contact</Text>
+            <TravelerDetailsForm
+              value={traveler}
+              onChange={setTraveler}
+              title={null}
+            />
+          </Animated.View>
 
           <Animated.View
             entering={FadeInUp.delay(320)}
             layout={Layout.springify()}
+            style={payBtnStyle}
           >
-            <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.9}>
+            <TouchableOpacity
+              style={styles.payBtn}
+              onPress={handlePay}
+              activeOpacity={0.9}
+              onPressIn={() =>
+                (payScale.value = withSpring(0.96, { damping: 12 }))
+              }
+              onPressOut={() =>
+                (payScale.value = withSpring(1, { damping: 12 }))
+              }
+            >
               <Text style={styles.payBtnText}>
                 Continue • {formatCurrency(total, displayCurrency)}
               </Text>
             </TouchableOpacity>
           </Animated.View>
           {premiumAlert}
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -631,6 +713,30 @@ const styles = StyleSheet.create({
     color: "#002b5c",
     fontSize: 16,
     fontWeight: "700",
+  },
+  parallaxBg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 620,
+    zIndex: -1,
+  },
+  glow: {
+    position: "absolute",
+    width: 520,
+    height: 520,
+    borderRadius: 260,
+    backgroundColor: "rgba(74,222,128,0.14)",
+  },
+  glowTop: {
+    top: -140,
+    left: -120,
+    backgroundColor: "rgba(96,165,250,0.18)",
+  },
+  glowBottom: {
+    top: 240,
+    right: -140,
   },
 });
 

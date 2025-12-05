@@ -41,8 +41,8 @@ export default {
       policy: "appVersion",
     },
 
-    // ✅ SDK 54: plugin for expo-font
-    plugins: ["expo-font"],
+    // ✅ SDK 54: plugins
+    plugins: ["expo-font", "expo-camera"],
 
     // ✅ EAS project link
     extra: {

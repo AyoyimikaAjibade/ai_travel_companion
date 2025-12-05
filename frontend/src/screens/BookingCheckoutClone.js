@@ -1,5 +1,5 @@
 // src/screens/BookingCheckoutClone.js
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,18 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeInDown, FadeInUp, Layout } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  Layout,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { SPACING } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
@@ -42,6 +53,9 @@ const BookingCheckoutClone = ({ route, navigation }) => {
   const taxes = subtotal * 0.18;
   const twosFee = subtotal * 0.05;
   const total = subtotal + taxes + twosFee;
+  const heroFloat = useSharedValue(0);
+  const ctaScale = useSharedValue(1);
+  const scrollY = useSharedValue(0);
   const maxGuests = useMemo(() => {
     const candidates = [
       data?.maxGuests,
@@ -103,6 +117,39 @@ const BookingCheckoutClone = ({ route, navigation }) => {
       p.lastName.trim().length > 0
   );
   const [showPremiumAlert, premiumAlert] = usePremiumAlert();
+
+  useEffect(() => {
+    heroFloat.value = withRepeat(
+      withSequence(
+        withTiming(-4, { duration: 1600 }),
+        withTiming(4, { duration: 1600 })
+      ),
+      -1,
+      true
+    );
+  }, [heroFloat]);
+
+  const heroImageStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: heroFloat.value }],
+  }));
+
+  const ctaAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ctaScale.value }],
+  }));
+
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
+
+  const topGlowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollY.value * -0.12 }],
+    opacity: 0.6,
+  }));
+
+  const bottomGlowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollY.value * 0.08 }, { scale: 1.05 }],
+    opacity: 0.5,
+  }));
 
   const handlePay = () => {
     if (!travelerValid) {
@@ -178,14 +225,24 @@ const BookingCheckoutClone = ({ route, navigation }) => {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-        <ScrollView
+        <Animated.ScrollView
           contentContainerStyle={[
             styles.scroll,
             { paddingBottom: insets.bottom + 260 + 3 },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         >
+          <View style={styles.parallaxBg} pointerEvents="none">
+            <Animated.View
+              style={[styles.glow, styles.glowTop, topGlowStyle]}
+            />
+            <Animated.View
+              style={[styles.glow, styles.glowBottom, bottomGlowStyle]}
+            />
+          </View>
           {/* Property card */}
           <Animated.View
             style={styles.card}
@@ -193,15 +250,17 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             layout={Layout.springify()}
           >
             <View style={styles.rowCenter}>
-              <Image
-                source={{
-                  uri:
-                    data.image ||
-                    "https://www.hoteldel.com/wp-content/uploads/2021/01/hotel-del-coronado-views-suite-K1TOS1-K1TOJ1-1600x900-1.jpg",
-                }}
-                style={styles.hotelImg}
-                resizeMode="cover"
-              />
+              <Animated.View style={heroImageStyle}>
+                <Image
+                  source={{
+                    uri:
+                      data.image ||
+                      "https://www.hoteldel.com/wp-content/uploads/2021/01/hotel-del-coronado-views-suite-K1TOS1-K1TOJ1-1600x900-1.jpg",
+                  }}
+                  style={styles.hotelImg}
+                  resizeMode="cover"
+                />
+              </Animated.View>
               <View style={{ flex: 1, marginLeft: SPACING.sm }}>
                 <Text style={styles.hotelName}>{data.name ?? "Souq View"}</Text>
                 <Text style={styles.hotelMeta}>
@@ -337,10 +396,10 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             </Text>
           </Animated.View>
 
-          {/* spacing so CTA isn't covered */}
+          {/* spacing so CTA isn't covered */}å
           <View style={{ height: 180 }} />
           {premiumAlert}
-          </ScrollView>
+          </Animated.ScrollView>
 
           {/* Sticky bottom CTA: anchored to bottom of safeBody */}
           <View style={styles.stickyWrap} pointerEvents="box-none">
@@ -356,16 +415,20 @@ const BookingCheckoutClone = ({ route, navigation }) => {
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.cta}
-                onPress={handlePay}
-                activeOpacity={0.9}
-                accessibilityLabel="Confirm and pay"
-              >
-                <Text style={styles.ctaText}>
-                  Confirm • {formatCurrency(total, displayCurrency)}
-                </Text>
-              </TouchableOpacity>
+              <Animated.View style={ctaAnimatedStyle}>
+                <TouchableOpacity
+                  style={styles.cta}
+                  onPress={handlePay}
+                  activeOpacity={0.9}
+                  accessibilityLabel="Confirm and pay"
+                  onPressIn={() => (ctaScale.value = withSpring(0.96, { damping: 12 }))}
+                  onPressOut={() => (ctaScale.value = withSpring(1, { damping: 12 }))}
+                >
+                  <Text style={styles.ctaText}>
+                    Confirm • {formatCurrency(total, displayCurrency)}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
             </Animated.View>
           </View>
         </KeyboardAvoidingView>
@@ -548,4 +611,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ctaText: { color: "#0f172a", fontSize: 16, fontWeight: "900" },
+  parallaxBg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 620,
+    zIndex: -1,
+  },
+  glow: {
+    position: "absolute",
+    width: 520,
+    height: 520,
+    borderRadius: 260,
+    backgroundColor: "rgba(124,58,237,0.18)",
+  },
+  glowTop: {
+    top: -160,
+    left: -80,
+  },
+  glowBottom: {
+    top: 220,
+    right: -120,
+    backgroundColor: "rgba(14,165,233,0.18)",
+  },
 });

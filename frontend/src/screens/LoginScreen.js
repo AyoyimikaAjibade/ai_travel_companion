@@ -34,6 +34,9 @@ import {
 } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 
+const ADMIN_USERNAME = "Twos";
+const ADMIN_PASSWORD = "Admin133";
+
 export default function LoginScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [username, setUsername] = useState("");
@@ -58,6 +61,29 @@ export default function LoginScreen({ navigation }) {
     const err = validate();
     if (err) {
       Alert.alert("Login", err);
+      return;
+    }
+
+    const isAdminLogin =
+      username.trim() === ADMIN_USERNAME && password === ADMIN_PASSWORD;
+    if (isAdminLogin) {
+      setSession({
+        user: {
+          id: "admin-local",
+          username: ADMIN_USERNAME,
+          name: "Admin",
+          role: "admin",
+          email: "admin@twos.local",
+        },
+        accessToken: "admin-offline-token",
+        refreshToken: null,
+        userId: "admin-local",
+      });
+      Alert.alert(
+        "Admin mode",
+        "You are logged in with admin tools. QR scanning is enabled."
+      );
+      navigation.replace("AdminScanner");
       return;
     }
 
