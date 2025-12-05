@@ -22,7 +22,7 @@ from dependencies import (
     get_db,
     get_plan_service,
 )
-from models.chat import ChatCreate
+from models.chat import ChatCreate, ChatStatus
 from models.chat_message import ChatMessageCreate
 from models.user import User
 from services.chat_message_service import ChatMessageService
@@ -313,6 +313,7 @@ def _persist_chat_messages(
 def _create_plan_from_ai_response(
     db: Session,
     plan_service: PlanService,
+    chat_service: ChatService,
     chat_id: UUID,
     slot_id: str,
     ai_response: Dict[str, Any],
@@ -381,6 +382,14 @@ def _create_plan_from_ai_response(
         
         # Create new plan (always creates, tracks multiple plans per chat)
         plan_service.confirm_plan(db, chat_id, slot_id, plan_payload)
+        
+        # Update chat status to booked when plan is created
+        try:
+            chat = chat_service.get_by_id(db, chat_id)
+            if chat and (not chat.status or chat.status == ChatStatus.DRAFT.value):
+                chat_service.change_chat_status(db, chat_id, ChatStatus.BOOKED.value)
+        except Exception:
+            pass
     
     except Exception as e:
         pass
@@ -505,7 +514,7 @@ async def persist_chat_data(
             # Each plan change creates a new plan record (tracks multiple plans per chat)
             if is_complete_plan and ai_response.get("plan_id"):
                 _create_plan_from_ai_response(
-                    db, plan_service, final_chat_id, slot_id, ai_response, returned_slots
+                    db, plan_service, chat_service, final_chat_id, slot_id, ai_response, returned_slots
                 )
                 persisted_plan_id = ai_response.get("plan_id")
         

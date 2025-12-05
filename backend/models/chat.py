@@ -1,9 +1,17 @@
 from datetime import date, datetime
 from typing import List, Optional
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
+from enum import Enum
 import uuid
 
 from .base import BaseModel
+
+
+class ChatStatus(str, Enum):
+    DRAFT = "draft"
+    BOOKED = "booked"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
 
 class ChatBase(SQLModel):
     """Base chat model with common fields."""
@@ -24,7 +32,10 @@ class ChatBase(SQLModel):
     hotel_rating: Optional[int] = Field(default=None, ge=0, le=5)  # From current_slots.hotel.rating
     car: Optional[bool] = Field(default=None)  # From current_slots.car
     attractions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))  # From current_slots.attractions
-    status: str = Field(default="draft", max_length=20)
+    status: Optional[str] = Field(
+        default=ChatStatus.DRAFT.value,
+        max_length=20
+    )
     notes: Optional[str] = Field(default=None)
 
 class ChatCreate(ChatBase):

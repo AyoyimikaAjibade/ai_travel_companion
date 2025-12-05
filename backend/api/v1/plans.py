@@ -6,14 +6,15 @@ from uuid import UUID
 from dependencies import get_db, get_plan_service, get_chat_service
 from services.plan_service import PlanService
 from services.chat_service import ChatService
-from models.plan import Plan
+from models.plan import Plan, PlanWithStatus
+from models.chat import ChatStatus
 from core.security import get_current_active_user
 from models.user import User
 
 router = APIRouter()
 
 
-@router.get("/chat/{chat_id}", response_model=List[Plan])
+@router.get("/chat/{chat_id}", response_model=List[PlanWithStatus])
 def get_chat_plans(
     chat_id: UUID,
     skip: int = Query(0, ge=0),
@@ -22,7 +23,7 @@ def get_chat_plans(
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+) -> List[PlanWithStatus]:
     chat = chat_service.get_by_id(db, chat_id)
     if not chat:
         raise HTTPException(
@@ -42,22 +43,23 @@ def get_chat_plans(
         )
     
     plans = plan_service.get_chat_plans(db, chat_id, skip=skip, limit=limit)
+    chat_status = chat.status or ChatStatus.DRAFT.value
     result = []
     for plan in plans:
-        plan_dict = plan.dict() if hasattr(plan, 'dict') else plan.model_dump()
-        plan_dict['status'] = chat.status
-        result.append(plan_dict)
+        plan_dict = plan.dict(exclude_none=False) if hasattr(plan, 'dict') else plan.model_dump(exclude_none=False)
+        plan_dict['status'] = chat_status
+        result.append(PlanWithStatus(**plan_dict))
     return result
 
 
-@router.get("/{plan_id}", response_model=Plan)
+@router.get("/{plan_id}", response_model=PlanWithStatus)
 def get_plan(
     plan_id: UUID,
     db: Session = Depends(get_db),
     plan_service: PlanService = Depends(get_plan_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+) -> PlanWithStatus:
     plan = plan_service.get_by_id(db, plan_id)
     if not plan:
         raise HTTPException(
@@ -82,9 +84,9 @@ def get_plan(
             detail="Not enough permissions"
         )
     
-    plan_dict = plan.dict() if hasattr(plan, 'dict') else plan.model_dump()
-    plan_dict['status'] = chat.status
-    return plan_dict
+    plan_dict = plan.dict(exclude_none=False) if hasattr(plan, 'dict') else plan.model_dump(exclude_none=False)
+    plan_dict['status'] = chat.status or ChatStatus.DRAFT.value
+    return PlanWithStatus(**plan_dict)
 
 
 @router.delete("/{plan_id}")

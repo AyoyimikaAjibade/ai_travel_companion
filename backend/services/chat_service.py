@@ -8,7 +8,7 @@ from uuid import UUID
 
 from .base_service import BaseService
 from repositories.chat_repository import ChatRepository
-from models.chat import Chat, ChatCreate, ChatUpdate
+from models.chat import Chat, ChatCreate, ChatUpdate, ChatStatus
 
 
 class ChatService(BaseService[Chat]):
@@ -101,7 +101,37 @@ class ChatService(BaseService[Chat]):
     
     def change_chat_status(self, db: Session, chat_id: UUID, new_status: str) -> Optional[Chat]:
         """Change chat status."""
-        return self.chat_repository.update_chat_status(db, chat_id, new_status)
+        chat = self.chat_repository.get_by_id(db, chat_id)
+        if not chat:
+            return None
+        
+        current_status = chat.status or ChatStatus.DRAFT.value
+        new_status_value = new_status if isinstance(new_status, str) else new_status.value if hasattr(new_status, 'value') else str(new_status)
+        
+        valid_statuses = [s.value for s in ChatStatus]
+        if new_status_value not in valid_statuses:
+            raise ValueError(f"Invalid status: {new_status_value}. Valid statuses: {valid_statuses}")
+        
+        if current_status == ChatStatus.CANCELLED.value and new_status_value != ChatStatus.CANCELLED.value:
+            raise ValueError("Cannot change status from cancelled. Create a new chat instead.")
+        
+        if current_status == new_status_value:
+            return chat
+        
+        return self.chat_repository.update_chat_status(db, chat_id, new_status_value)
+    
+    def cancel_chat_booking(self, db: Session, chat_id: UUID) -> Optional[Chat]:
+        """Cancel a chat booking with business logic."""
+        chat = self.chat_repository.get_by_id(db, chat_id)
+        if not chat:
+            return None
+        
+        current_status = chat.status or ChatStatus.DRAFT.value
+        
+        if current_status == ChatStatus.CANCELLED.value:
+            raise ValueError("Chat booking is already cancelled")
+        
+        return self.change_chat_status(db, chat_id, ChatStatus.CANCELLED.value)
     
     def duplicate_chat(self, db: Session, chat_id: UUID, user_id: UUID) -> Optional[Chat]:
         """

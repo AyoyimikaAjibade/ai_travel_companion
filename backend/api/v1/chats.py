@@ -9,7 +9,7 @@ from uuid import UUID
 
 from dependencies import get_db, get_chat_service
 from services.chat_service import ChatService
-from models.chat import Chat, ChatUpdate
+from models.chat import Chat, ChatUpdate, ChatStatus
 from core.security import get_current_active_user
 from models.user import User
 
@@ -80,7 +80,13 @@ def get_user_chats(
 ) -> Any:
     """Get all chats for the current user."""
     chats = chat_service.get_user_chats(db, current_user.id, skip=skip, limit=limit)
-    return [{"current_slots": _chat_to_current_slots(chat), "status": chat.status} for chat in chats]
+    result = []
+    for chat in chats:
+        result.append({
+            "current_slots": _chat_to_current_slots(chat),
+            "status": chat.status or ChatStatus.DRAFT.value
+        })
+    return result
 
 
 @router.get("/{chat_id}")
@@ -112,7 +118,7 @@ def get_chat(
     
     return {
         "current_slots": _chat_to_current_slots(chat),
-        "status": chat.status
+        "status": chat.status or ChatStatus.DRAFT.value
     }
 
 
@@ -145,7 +151,7 @@ def get_chat_by_slot_id(
     
     return {
         "current_slots": _chat_to_current_slots(chat),
-        "status": chat.status
+        "status": chat.status or ChatStatus.DRAFT.value
     }
 
 
@@ -176,22 +182,67 @@ def cancel_chat_booking(
             detail="Not enough permissions"
         )
     
-    if chat.status == "cancelled":
+    try:
+        updated_chat = chat_service.cancel_chat_booking(db, chat_id)
+        if not updated_chat:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to cancel booking"
+            )
+        return {
+            "message": "Booking cancelled successfully",
+            "status": updated_chat.status or ChatStatus.DRAFT.value
+        }
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Chat booking is already cancelled"
+            detail=str(e)
         )
-    
-    chat_update = ChatUpdate(status="cancelled")
-    updated_chat = chat_service.update_chat(db, chat_id, chat_update)
-    
-    if not updated_chat:
+
+
+@router.post("/{chat_id}/confirm")
+def confirm_chat_booking(
+    chat_id: UUID,
+    db: Session = Depends(get_db),
+    chat_service: ChatService = Depends(get_chat_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """Confirm a chat booking."""
+    chat = chat_service.get_by_id(db, chat_id)
+    if not chat:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to cancel booking"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found"
         )
     
-    return {"message": "Booking cancelled successfully", "status": "cancelled"}
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
+    
+    if chat.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
+    try:
+        updated_chat = chat_service.change_chat_status(db, chat_id, ChatStatus.CONFIRMED.value)
+        if not updated_chat:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to confirm booking"
+            )
+        return {
+            "message": "Booking confirmed successfully",
+            "status": updated_chat.status or ChatStatus.DRAFT.value
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.delete("/{chat_id}")

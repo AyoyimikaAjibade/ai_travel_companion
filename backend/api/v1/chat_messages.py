@@ -10,14 +10,15 @@ from uuid import UUID
 from dependencies import get_db, get_chat_message_service, get_chat_service
 from services.chat_message_service import ChatMessageService
 from services.chat_service import ChatService
-from models.chat_message import ChatMessage
+from models.chat_message import ChatMessage, ChatMessageWithStatus
+from models.chat import ChatStatus
 from core.security import get_current_active_user
 from models.user import User
 
 router = APIRouter()
 
 
-@router.get("/{chat_id}/messages", response_model=List[ChatMessage])
+@router.get("/{chat_id}/messages", response_model=List[ChatMessageWithStatus])
 def get_chat_messages(
     chat_id: UUID,
     skip: int = Query(0, ge=0),
@@ -26,7 +27,7 @@ def get_chat_messages(
     chat_message_service: ChatMessageService = Depends(get_chat_message_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+) -> List[ChatMessageWithStatus]:
     """Get all messages for a specific chat."""
     chat = chat_service.get_by_id(db, chat_id)
     if not chat:
@@ -47,15 +48,16 @@ def get_chat_messages(
         )
     
     messages = chat_message_service.get_chat_messages(db, chat_id, skip=skip, limit=limit)
+    chat_status = chat.status or ChatStatus.DRAFT.value
     result = []
     for msg in messages:
-        msg_dict = msg.dict() if hasattr(msg, 'dict') else msg.model_dump()
-        msg_dict['status'] = chat.status
-        result.append(msg_dict)
+        msg_dict = msg.dict(exclude_none=False) if hasattr(msg, 'dict') else msg.model_dump(exclude_none=False)
+        msg_dict['status'] = chat_status
+        result.append(ChatMessageWithStatus(**msg_dict))
     return result
 
 
-@router.get("/slot/{slot_id}/messages", response_model=List[ChatMessage])
+@router.get("/slot/{slot_id}/messages", response_model=List[ChatMessageWithStatus])
 def get_messages_by_slot_id(
     slot_id: str,
     skip: int = Query(0, ge=0),
@@ -64,7 +66,7 @@ def get_messages_by_slot_id(
     chat_message_service: ChatMessageService = Depends(get_chat_message_service),
     chat_service: ChatService = Depends(get_chat_service),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+) -> List[ChatMessageWithStatus]:
     """Get all messages for a specific slot_id (AI service chat ID)."""
     # Verify chat exists and user owns it
     chat = chat_service.get_chat_by_slot_id(db, slot_id)
@@ -87,10 +89,11 @@ def get_messages_by_slot_id(
         )
     
     messages = chat_message_service.get_messages_by_slot_id(db, slot_id, skip=skip, limit=limit)
+    chat_status = chat.status or ChatStatus.DRAFT.value
     result = []
     for msg in messages:
-        msg_dict = msg.dict() if hasattr(msg, 'dict') else msg.model_dump()
-        msg_dict['status'] = chat.status
-        result.append(msg_dict)
+        msg_dict = msg.dict(exclude_none=False) if hasattr(msg, 'dict') else msg.model_dump(exclude_none=False)
+        msg_dict['status'] = chat_status
+        result.append(ChatMessageWithStatus(**msg_dict))
     return result
 

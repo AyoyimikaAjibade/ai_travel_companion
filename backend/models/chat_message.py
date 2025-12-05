@@ -2,6 +2,7 @@
 Chat message model for tracking conversation history.
 """
 from typing import Optional, Dict, Any
+from datetime import datetime
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 import uuid
 
@@ -38,4 +39,18 @@ class ChatMessage(ChatMessageBase, BaseModel, table=True):
     
     # Relationships
     chat: "Chat" = Relationship(back_populates="messages")
+
+
+class ChatMessageWithStatus(SQLModel):
+    """Chat message response model with status field."""
+    id: uuid.UUID
+    role: str
+    content: str
+    slot_id: Optional[str] = None
+    message_metadata: Optional[Dict[str, Any]] = None
+    ai_response_data: Optional[Dict[str, Any]] = None
+    chat_id: uuid.UUID
+    created_time: datetime
+    updated_time: datetime
+    status: str
 

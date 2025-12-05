@@ -53,3 +53,22 @@ class Plan(PlanBase, table=True):
     
     chat: "Chat" = Relationship(back_populates="plans")
 
+
+class PlanWithStatus(SQLModel):
+    """Plan response model with status field."""
+    plan_id: uuid.UUID
+    total_price: float
+    score: Optional[float] = None
+    explanation: Optional[str] = None
+    flight: Optional[Dict[str, Any]] = None
+    hotel: Optional[Dict[str, Any]] = None
+    car: Optional[Dict[str, Any]] = None
+    attractions: Optional[Dict[str, Any]] = None
+    deeplinks: Dict[str, Any] = Field(default={})
+    ai_generated: bool
+    manual: bool
+    chat_id: uuid.UUID
+    created_time: datetime
+    updated_time: datetime
+    status: str
+

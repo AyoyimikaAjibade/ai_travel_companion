@@ -589,6 +589,31 @@
           ]
         },
         {
+          "name": "Confirm Chat Booking",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/chats/{{chat_id}}/confirm",
+              "host": ["{{full_url}}"],
+              "path": ["chats", "{{chat_id}}", "confirm"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Booking confirmed successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Delete Chat",
           "request": {
             "method": "DELETE",
