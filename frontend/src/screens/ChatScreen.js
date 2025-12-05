@@ -653,6 +653,7 @@ class ChatScreenClass extends React.Component {
       hotel: resp?.hotel ?? null,
       car: resp?.car ?? null,
       attractions: Array.isArray(resp?.attractions) ? resp.attractions : [],
+      currentSlots: slotsFromServer,
     };
 
     const hasPlan =

@@ -24,6 +24,7 @@ export default function ProviderPreview({ route, navigation }) {
     serviceType,
     basePlanId,
     chatId,
+    currentSlots,
   } = route.params || {};
 
   const providerKey = (provider || "").toLowerCase();
@@ -36,6 +37,7 @@ export default function ProviderPreview({ route, navigation }) {
     serviceType: derivedType,
     basePlanId,
     chatId,
+    currentSlots,
   };
 
   if (isFlight(derivedType) || providerKey.includes("expedia")) {

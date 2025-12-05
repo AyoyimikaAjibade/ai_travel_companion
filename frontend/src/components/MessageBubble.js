@@ -27,6 +27,109 @@ try {
   /* ignore */
 }
 
+// Lightweight airline code map to turn IATA codes into readable names
+const AIRLINE_CODE_MAP = {
+  AA: "American Airlines",
+  AC: "Air Canada",
+  AF: "Air France",
+  AI: "Air India",
+  AM: "Aeromexico",
+  AS: "Alaska Airlines",
+  AZ: "ITA Airways",
+  BA: "British Airways",
+  B6: "JetBlue",
+  CX: "Cathay Pacific",
+  DL: "Delta Air Lines",
+  EK: "Emirates",
+  ET: "Ethiopian Airlines",
+  EY: "Etihad Airways",
+  IB: "Iberia",
+  JL: "Japan Airlines",
+  KL: "KLM",
+  LH: "Lufthansa",
+  MS: "Egyptair",
+  NH: "ANA",
+  NK: "Spirit Airlines",
+  QR: "Qatar Airways",
+  RJ: "Royal Jordanian",
+  SQ: "Singapore Airlines",
+  SV: "Saudia",
+  TK: "Turkish Airlines",
+  UA: "United Airlines",
+  VS: "Virgin Atlantic",
+  WN: "Southwest Airlines",
+  WY: "Oman Air",
+  XY: "flynas",
+};
+
+const resolveAirlineName = (airline) => {
+  if (!airline) return "";
+  const raw = airline.toString().trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (AIRLINE_CODE_MAP[upper]) return AIRLINE_CODE_MAP[upper];
+  return raw;
+};
+
+const extractFlightPrice = (flight = {}) => {
+  const candidates = [
+    flight.price_per_person,
+    flight.pricePerPerson,
+    flight.price_per_passenger,
+    flight.price_per,
+    flight.price_total,
+    flight.total_price,
+    flight.total,
+    flight.price,
+  ];
+  for (const value of candidates) {
+    if (value == null) continue;
+    const num = Number(value);
+    if (!Number.isNaN(num)) return num;
+  }
+  return null;
+};
+
+const getFlightDurationLabel = (departure, arrival) => {
+  if (!departure || !arrival) return null;
+  const dep = new Date(departure);
+  const arr = new Date(arrival);
+  if (Number.isNaN(dep.getTime()) || Number.isNaN(arr.getTime())) return null;
+  const diffMinutes = Math.round((arr.getTime() - dep.getTime()) / 60000);
+  if (diffMinutes <= 0) return null;
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+};
+
+const resolveRouteCodes = (flight = {}, currentSlots = {}) => {
+  const origin =
+    flight.origin_airport_code ??
+    flight.originAirportCode ??
+    flight.origin ??
+    flight.departure_airport_code ??
+    flight.departureAirportCode ??
+    currentSlots.origin_airport_code ??
+    currentSlots.origin ??
+    currentSlots.departure_airport_code ??
+    currentSlots.departure ??
+    null;
+  const destination =
+    flight.destination_airport_code ??
+    flight.destinationAirportCode ??
+    flight.destination ??
+    flight.arrival_airport_code ??
+    flight.arrivalAirportCode ??
+    currentSlots.destination_airport_code ??
+    currentSlots.destination ??
+    currentSlots.arrival_airport_code ??
+    currentSlots.arrival ??
+    null;
+  return { origin, destination };
+};
+
 const TypingBubble = () => {
   const sourceToUse = LoaderPlane || (__DEV__ ? DevFallback : null);
 
@@ -121,9 +224,10 @@ const MessageBubble = ({
         serviceKey: payload?.serviceKey,
         serviceType: payload?.serviceType,
         basePlanId: payload?.planId || payload?.basePlanId,
+        currentSlots: plan?.currentSlots,
       });
     },
-    [navigation, chatId]
+    [navigation, chatId, plan]
   );
 
   const handleBookAll = React.useCallback(
@@ -137,6 +241,7 @@ const MessageBubble = ({
     } = {}) => {
       const sourcePlan = planOverride ?? plan;
       if (!navigation?.navigate || !sourcePlan) return;
+      const slotsForRoute = sourcePlan.currentSlots || {};
 
       const effectiveBaseId =
         basePlanId ||
@@ -168,17 +273,35 @@ const MessageBubble = ({
         providedKey || buildServiceKey(effectiveBaseId, type, unique);
 
       if (sourcePlan?.flight) {
+        const { origin, destination } = resolveRouteCodes(
+          sourcePlan.flight,
+          slotsForRoute
+        );
+        const airlineName = resolveAirlineName(sourcePlan.flight.airline);
+        const routeLabel = [
+          origin,
+          destination,
+        ]
+          .filter(Boolean)
+          .join(" → ");
+        const flightPrice = extractFlightPrice(sourcePlan.flight);
         const key = ensureKey(flightKey, "flight");
         if (!isServiceBooked(key)) {
-          registerItem("Flight", sourcePlan.flight.price, {
-            provider: sourcePlan.flight.airline,
-            description: `${sourcePlan.flight.airline ?? "Flight"} ${
-              sourcePlan.flight.type ?? ""
-            }`.trim(),
+          registerItem("Flight", flightPrice, {
+            provider: airlineName || sourcePlan.flight.airline,
+            description:
+              routeLabel ||
+              `${airlineName || "Flight"} ${sourcePlan.flight.type ?? ""}`.trim(),
             currency: sourcePlan.flight.currency,
             serviceType: "flight",
             serviceKey: key,
-            planData: sourcePlan.flight,
+            planData: {
+              ...sourcePlan.flight,
+              airline: airlineName || sourcePlan.flight.airline,
+              origin_airport_code: origin ?? sourcePlan.flight.origin_airport_code,
+              destination_airport_code:
+                destination ?? sourcePlan.flight.destination_airport_code,
+            },
           });
         }
       }
@@ -278,6 +401,7 @@ const MessageBubble = ({
   const renderPlanSection = () => {
     if (!plan) return null;
     const { flight, hotel, car, attractions, planId, slotId } = plan;
+    const currentSlots = plan.currentSlots || {};
     const hasAttractions = Array.isArray(attractions) && attractions.length > 0;
     const basePlanId = planId || slotId || "plan";
 
@@ -338,13 +462,30 @@ const MessageBubble = ({
         {flight && Object.keys(flight).length > 0 && (
           <View style={styles.planSection}>
             <Text style={styles.planSectionTitle}>Flight</Text>
-            {flight.airline && (
-              <Text style={styles.planLine}>Airline: {flight.airline}</Text>
+            {resolveAirlineName(flight.airline) && (
+              <Text style={styles.planLine}>
+                Airline: {resolveAirlineName(flight.airline)}
+              </Text>
             )}
-            {flight.price != null && (
+            {(() => {
+              const { origin, destination } = resolveRouteCodes(
+                flight,
+                currentSlots
+              );
+              const routeString = [origin, destination]
+                .filter(Boolean)
+                .join(" \u2192 ");
+              if (!routeString) return null;
+              return <Text style={styles.planLine}>Route: {routeString}</Text>;
+            })()}
+            {extractFlightPrice(flight) != null && (
               <Text style={styles.planLine}>
                 Price: {formatCurrency(
-                  convertCurrency(flight.price, flight.currency, targetCurrency),
+                  convertCurrency(
+                    extractFlightPrice(flight),
+                    flight.currency,
+                    targetCurrency
+                  ),
                   targetCurrency
                 )}
               </Text>
@@ -359,14 +500,17 @@ const MessageBubble = ({
                 Arrive: {formatDateTime(flight.arrival_time)}
               </Text>
             )}
-            {flight.link && (
-              <TouchableOpacity
-                style={styles.planLink}
-                activeOpacity={0.85}
-                onPress={() => openLink(flight.link)}
-              >
-                <Text style={styles.planLinkText}>Open flight details</Text>
-              </TouchableOpacity>
+            {getFlightDurationLabel(
+              flight.departure_time,
+              flight.arrival_time
+            ) && (
+              <Text style={styles.planLine}>
+                Duration:{" "}
+                {getFlightDurationLabel(
+                  flight.departure_time,
+                  flight.arrival_time
+                )}
+              </Text>
             )}
             <TouchableOpacity
               style={styles.planCta}
@@ -374,16 +518,21 @@ const MessageBubble = ({
               onPress={
                 flightBooked
                   ? () => openServiceBooking(flightKey)
-                  : () =>
-                      openProviderPreview("Expedia", "flight", {
-                        ...flight,
-                        price: flight.price,
-                        currency: flight.currency,
-                        serviceKey: flightKey,
-                        serviceType: "flight",
-                        planId: basePlanId,
-                        basePlanId,
-                      })
+                : () =>
+                    openProviderPreview("Expedia", "flight", {
+                      ...flight,
+                      origin_airport_code:
+                        resolveRouteCodes(flight, currentSlots).origin,
+                      destination_airport_code:
+                        resolveRouteCodes(flight, currentSlots).destination,
+                      price: extractFlightPrice(flight),
+                      airline: resolveAirlineName(flight.airline),
+                      currency: flight.currency,
+                      serviceKey: flightKey,
+                      serviceType: "flight",
+                      planId: basePlanId,
+                      basePlanId,
+                    })
               }
             >
               <Text style={styles.planCtaText}>
@@ -410,15 +559,6 @@ const MessageBubble = ({
                   targetCurrency
                 )}
               </Text>
-            )}
-            {hotel.link && (
-              <TouchableOpacity
-                style={styles.planLink}
-                activeOpacity={0.85}
-                onPress={() => openLink(hotel.link)}
-              >
-                <Text style={styles.planLinkText}>Open hotel details</Text>
-              </TouchableOpacity>
             )}
             <TouchableOpacity
               style={styles.planCta}

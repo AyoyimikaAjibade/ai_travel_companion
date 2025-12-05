@@ -17,6 +17,114 @@ import PassengersForm, {
 import { usePremiumAlert } from "../components/PremiumAlert";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 
+const AIRLINE_CODE_MAP = {
+  AA: "American Airlines",
+  AC: "Air Canada",
+  AF: "Air France",
+  AI: "Air India",
+  AM: "Aeromexico",
+  AS: "Alaska Airlines",
+  AZ: "ITA Airways",
+  BA: "British Airways",
+  B6: "JetBlue",
+  CX: "Cathay Pacific",
+  DL: "Delta Air Lines",
+  EK: "Emirates",
+  ET: "Ethiopian Airlines",
+  EY: "Etihad Airways",
+  IB: "Iberia",
+  JL: "Japan Airlines",
+  KL: "KLM",
+  LH: "Lufthansa",
+  MS: "Egyptair",
+  NH: "ANA",
+  NK: "Spirit Airlines",
+  QR: "Qatar Airways",
+  RJ: "Royal Jordanian",
+  SQ: "Singapore Airlines",
+  SV: "Saudia",
+  TK: "Turkish Airlines",
+  UA: "United Airlines",
+  VS: "Virgin Atlantic",
+  WN: "Southwest Airlines",
+  WY: "Oman Air",
+  XY: "flynas",
+};
+
+const resolveAirlineName = (airline) => {
+  if (!airline) return "";
+  const raw = airline.toString().trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (AIRLINE_CODE_MAP[upper]) return AIRLINE_CODE_MAP[upper];
+  return raw;
+};
+
+const extractFlightPrice = (flight = {}) => {
+  const candidates = [
+    flight.price_per_person,
+    flight.pricePerPerson,
+    flight.price_per_passenger,
+    flight.price_per,
+    flight.price_total,
+    flight.total_price,
+    flight.total,
+    flight.price,
+  ];
+  for (const value of candidates) {
+    if (value == null) continue;
+    const num = Number(value);
+    if (!Number.isNaN(num)) return num;
+  }
+  return null;
+};
+
+const getFlightDurationLabel = (departure, arrival) => {
+  if (!departure || !arrival) return null;
+  const dep = new Date(departure);
+  const arr = new Date(arrival);
+  if (Number.isNaN(dep.getTime()) || Number.isNaN(arr.getTime())) return null;
+  const diffMinutes = Math.round((arr.getTime() - dep.getTime()) / 60000);
+  if (diffMinutes <= 0) return null;
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}m`;
+};
+
+const getRouteLabel = (data = {}, slots = {}) => {
+  const origin =
+    data.origin_airport_code ??
+    data.originAirportCode ??
+    data.origin ??
+    data.departure_airport_code ??
+    data.departureAirportCode ??
+    data.from ??
+    slots.origin_airport_code ??
+    slots.originAirportCode ??
+    slots.origin ??
+    slots.departure_airport_code ??
+    slots.departureAirportCode ??
+    slots.from ??
+    "—";
+  const destination =
+    data.destination_airport_code ??
+    data.destinationAirportCode ??
+    data.destination ??
+    data.arrival_airport_code ??
+    data.arrivalAirportCode ??
+    data.to ??
+    slots.destination_airport_code ??
+    slots.destinationAirportCode ??
+    slots.destination ??
+    slots.arrival_airport_code ??
+    slots.arrivalAirportCode ??
+    slots.to ??
+    "—";
+  return `${origin} → ${destination}`;
+};
+
 const CABIN_MULTIPLIERS = {
   economy: 1,
   business: 2.5,
@@ -49,7 +157,7 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
   const chatId = route.params?.chatId;
   const { convertCurrency, targetCurrency } = useCurrencyConverter();
   const displayCurrency = targetCurrency || currency;
-  const rawPrice = data?.price ?? 980;
+  const rawPrice = extractFlightPrice(data) ?? 980;
   const cabinDefault = (data?.cabinClass ?? data?.cabin ?? "economy")
     .toString()
     .toLowerCase();
@@ -101,6 +209,14 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
   const arrive = data?.arrival_time
     ? new Date(data.arrival_time).toLocaleString()
     : "Jan 13, 7:45 PM";
+  const durationLabel = getFlightDurationLabel(
+    data?.departure_time,
+    data?.arrival_time
+  );
+  const airlineLabel = resolveAirlineName(data?.airline) || "Expedia partner";
+  const slots = route.params?.currentSlots || {};
+  const routeLabel = getRouteLabel(data, slots);
+  const flightType = data?.flight_type ?? data?.type ?? "Non-stop";
   const [traveler, setTraveler] = useState({
     name: data.traveler ?? "",
     email: data.email ?? "",
@@ -183,11 +299,9 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
       >
         <View style={styles.tripCard}>
           <Text style={styles.sectionLabel}>Review your trip</Text>
-          <Text style={styles.flightTitle}>
-            {data.origin_airport_code ?? "SFO"} → {data.destination_airport_code ?? "DXB"}
-          </Text>
+          <Text style={styles.flightTitle}>{routeLabel}</Text>
           <Text style={styles.flightMeta}>
-            {data.airline ?? "Expedia partner"} • {data.type ?? "Non-stop"}
+            {airlineLabel} • {flightType}
           </Text>
           <View style={styles.timeline}>
             <View style={styles.timelineDot} />
@@ -204,6 +318,9 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
               <Text style={styles.timelineValue}>{arrive}</Text>
             </View>
           </View>
+          {durationLabel && (
+            <Text style={styles.durationText}>{`Duration: ${durationLabel}`}</Text>
+          )}
           <View style={styles.badgeRow}>
             <ShieldCheck size={16} color="#1c4ed8" />
             <Text style={styles.badgeText}>Free 24h cancellation (demo)</Text>
@@ -391,6 +508,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginTop: 4,
     fontSize: 14,
+  },
+  durationText: {
+    color: "#cbd5e1",
+    fontSize: 13,
+    marginTop: 6,
   },
   badgeRow: {
     flexDirection: "row",
