@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, ShieldCheck, Gauge, Users } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
 import { formatCurrency } from "../utils/format";
@@ -22,6 +24,7 @@ const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1549923746-1235e86aa2f6?auto=format&fit=crop&w=1200&q=80";
 
 const HertzCheckoutClone = ({ route, navigation }) => {
+  const insets = useSafeAreaInsets();
   const { data = {}, currency = "USD" } = route.params || {};
   const serviceKey = route.params?.serviceKey;
   const serviceType = route.params?.serviceType ?? "car";
@@ -97,22 +100,30 @@ const HertzCheckoutClone = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
-        >
-          <ChevronLeft size={20} color={HERTZ_YELLOW} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hertz checkout</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <ChevronLeft size={20} color={HERTZ_YELLOW} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Hertz checkout</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 240 + 3 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.heroCard}>
           <Image source={imageSource} style={styles.carImage} resizeMode="cover" />
           <View style={styles.heroBody}>
@@ -186,7 +197,8 @@ const HertzCheckoutClone = ({ route, navigation }) => {
           </Text>
         </TouchableOpacity>
         {premiumAlert}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

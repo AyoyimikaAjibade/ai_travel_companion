@@ -6,8 +6,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
@@ -150,6 +152,7 @@ const CABIN_OPTIONS = [
 ];
 
 const ExpediaCheckoutClone = ({ route, navigation }) => {
+  const insets = useSafeAreaInsets();
   const { data = {}, currency = "USD" } = route.params || {};
   const serviceKey = route.params?.serviceKey;
   const serviceType = route.params?.serviceType ?? "flight";
@@ -281,100 +284,108 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.topBar}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
-        >
-          <ChevronLeft size={20} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.topTitle}>Expedia checkout</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.tripCard}>
-          <Text style={styles.sectionLabel}>Review your trip</Text>
-          <Text style={styles.flightTitle}>{routeLabel}</Text>
-          <Text style={styles.flightMeta}>
-            {airlineLabel} • {flightType}
-          </Text>
-          <View style={styles.timeline}>
-            <View style={styles.timelineDot} />
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineDot} />
-          </View>
-          <View style={styles.timelineRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.timelineLabel}>Depart</Text>
-              <Text style={styles.timelineValue}>{depart}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.timelineLabel}>Arrive</Text>
-              <Text style={styles.timelineValue}>{arrive}</Text>
-            </View>
-          </View>
-          {durationLabel && (
-            <Text style={styles.durationText}>{`Duration: ${durationLabel}`}</Text>
-          )}
-          <View style={styles.badgeRow}>
-            <ShieldCheck size={16} color="#1c4ed8" />
-            <Text style={styles.badgeText}>Free 24h cancellation (demo)</Text>
-          </View>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <ChevronLeft size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.topTitle}>Expedia checkout</Text>
+          <View style={{ width: 36 }} />
         </View>
 
-        <View style={styles.summaryCard}>
-          <Text style={styles.sectionLabel}>Passengers</Text>
-          {passengers.map((passenger, index) => (
-            <SummaryRow
-              key={passenger.id ?? `passenger-${index}`}
-              label={`Passenger ${index + 1}`}
-              value={`${passenger.firstName ?? ""} ${
-                passenger.lastName ?? ""
-              }`.trim() || "—"}
-            />
-          ))}
-          <Text style={styles.cabinHint}>{`Max passengers: ${maxPassengers}`}</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: insets.bottom + 280 + 3 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.tripCard}>
+            <Text style={styles.sectionLabel}>Review your trip</Text>
+            <Text style={styles.flightTitle}>{routeLabel}</Text>
+            <Text style={styles.flightMeta}>
+              {airlineLabel} • {flightType}
+            </Text>
+            <View style={styles.timeline}>
+              <View style={styles.timelineDot} />
+              <View style={styles.timelineLine} />
+              <View style={styles.timelineDot} />
+            </View>
+            <View style={styles.timelineRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.timelineLabel}>Depart</Text>
+                <Text style={styles.timelineValue}>{depart}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.timelineLabel}>Arrive</Text>
+                <Text style={styles.timelineValue}>{arrive}</Text>
+              </View>
+            </View>
+            {durationLabel && (
+              <Text style={styles.durationText}>{`Duration: ${durationLabel}`}</Text>
+            )}
+            <View style={styles.badgeRow}>
+              <ShieldCheck size={16} color="#1c4ed8" />
+              <Text style={styles.badgeText}>Free 24h cancellation (demo)</Text>
+            </View>
+          </View>
 
-        <View style={styles.summaryCard}>
-          <Text style={styles.sectionLabel}>Cabin class</Text>
-          <View style={styles.cabinOptions}>
-            {CABIN_OPTIONS.map((option) => {
-              const active = option.id === cabinClass;
-              return (
-                <TouchableOpacity
-                  key={option.id}
-                  style={[
-                    styles.cabinOption,
-                    active && styles.cabinOptionActive,
-                  ]}
-                  onPress={() => setCabinClass(option.id)}
-                  activeOpacity={0.85}
-                >
-                  <Text
+          <View style={styles.summaryCard}>
+            <Text style={styles.sectionLabel}>Passengers</Text>
+            {passengers.map((passenger, index) => (
+              <SummaryRow
+                key={passenger.id ?? `passenger-${index}`}
+                label={`Passenger ${index + 1}`}
+                value={`${passenger.firstName ?? ""} ${
+                  passenger.lastName ?? ""
+                }`.trim() || "—"}
+              />
+            ))}
+            <Text style={styles.cabinHint}>{`Max passengers: ${maxPassengers}`}</Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <Text style={styles.sectionLabel}>Cabin class</Text>
+            <View style={styles.cabinOptions}>
+              {CABIN_OPTIONS.map((option) => {
+                const active = option.id === cabinClass;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
                     style={[
-                      styles.cabinOptionLabel,
-                      active && styles.cabinOptionLabelActive,
+                      styles.cabinOption,
+                      active && styles.cabinOptionActive,
                     ]}
+                    onPress={() => setCabinClass(option.id)}
+                    activeOpacity={0.85}
                   >
-                    {option.label}
-                  </Text>
-                  <Text style={styles.cabinOptionSubtitle}>
-                    {option.subtitle}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.cabinOptionLabel,
+                        active && styles.cabinOptionLabelActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <Text style={styles.cabinOptionSubtitle}>
+                      {option.subtitle}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.cabinHint}>
+              {`Per passenger: ${pricePerPassengerLabel}`}
+            </Text>
           </View>
-          <Text style={styles.cabinHint}>
-            {`Per passenger: ${pricePerPassengerLabel}`}
-          </Text>
-        </View>
 
         <View style={styles.summaryCard}>
           <Text style={styles.sectionLabel}>Price summary</Text>
@@ -413,13 +424,14 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
           <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
         </View>
 
-        <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.9}>
-          <Text style={styles.payBtnText}>
-            Continue • {formatCurrency(total, displayCurrency)}
-          </Text>
-        </TouchableOpacity>
-        {premiumAlert}
-      </ScrollView>
+          <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.9}>
+            <Text style={styles.payBtnText}>
+              Continue • {formatCurrency(total, displayCurrency)}
+            </Text>
+          </TouchableOpacity>
+          {premiumAlert}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

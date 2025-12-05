@@ -9,8 +9,9 @@ import {
   Image,
   StatusBar,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SPACING } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
@@ -27,6 +28,7 @@ const logoUri =
   "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/Booking.com_Logo_Grey.svg/1200px-Booking.com_Logo_Grey.svg.png";
 
 const BookingCheckoutClone = ({ route, navigation }) => {
+  const insets = useSafeAreaInsets();
   const { data = {}, currency = "USD" } = route.params || {};
   const serviceKey = route.params?.serviceKey;
   const serviceType = route.params?.serviceType ?? "hotel";
@@ -171,9 +173,17 @@ const BookingCheckoutClone = ({ route, navigation }) => {
 
       {/* Body fills remaining area */}
       <SafeAreaView style={styles.safeBody} edges={["left", "right", "bottom"]}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: insets.bottom + 260 + 3 },
+          ]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Property card */}
           <View style={styles.card}>
@@ -305,30 +315,31 @@ const BookingCheckoutClone = ({ route, navigation }) => {
           {/* spacing so CTA isn't covered */}
           <View style={{ height: 180 }} />
           {premiumAlert}
-        </ScrollView>
+          </ScrollView>
 
-        {/* Sticky bottom CTA: anchored to bottom of safeBody */}
-        <View style={styles.stickyWrap} pointerEvents="box-none">
-          <View style={styles.stickyInner}>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Total</Text>
-              <Text style={styles.priceValue}>
-                {formatCurrency(total, displayCurrency)}
-              </Text>
+          {/* Sticky bottom CTA: anchored to bottom of safeBody */}
+          <View style={styles.stickyWrap} pointerEvents="box-none">
+            <View style={styles.stickyInner}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Total</Text>
+                <Text style={styles.priceValue}>
+                  {formatCurrency(total, displayCurrency)}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.cta}
+                onPress={handlePay}
+                activeOpacity={0.9}
+                accessibilityLabel="Confirm and pay"
+              >
+                <Text style={styles.ctaText}>
+                  Confirm • {formatCurrency(total, displayCurrency)}
+                </Text>
+              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={styles.cta}
-              onPress={handlePay}
-              activeOpacity={0.9}
-              accessibilityLabel="Confirm and pay"
-            >
-              <Text style={styles.ctaText}>
-                Confirm • {formatCurrency(total, displayCurrency)}
-              </Text>
-            </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );

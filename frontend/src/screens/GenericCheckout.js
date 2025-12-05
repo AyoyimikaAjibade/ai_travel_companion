@@ -6,8 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SPACING, COLORS, BORDER_RADIUS } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
@@ -19,6 +21,7 @@ import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 import { usePremiumAlert } from "../components/PremiumAlert";
 
 export default function GenericCheckout({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { provider = "Provider", data = {}, currency = "USD" } =
     route.params || {};
   const serviceType = route.params?.serviceType ?? route.params?.type ?? "item";
@@ -158,23 +161,28 @@ export default function GenericCheckout({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.85}
-        >
-          <ChevronLeft size={20} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{provider} checkout</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: SPACING.xl }}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <ChevronLeft size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{provider} checkout</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 260 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>{data.name ?? "Trip summary"}</Text>
           <Text style={styles.heroSubtitle}>
@@ -270,7 +278,8 @@ export default function GenericCheckout({ route, navigation }) {
           </Text>
         </TouchableOpacity>
         {premiumAlert}
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

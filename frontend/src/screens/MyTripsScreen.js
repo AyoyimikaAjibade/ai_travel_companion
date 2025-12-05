@@ -143,11 +143,16 @@ const MyTripsScreen = ({ navigation }) => {
   };
 
   const hydrateRemoteChats = React.useCallback(async () => {
-    if (!accessToken) return;
     const animKey = Date.now();
     setRefreshAnimKey(animKey);
     setRefreshing(true);
     const start = Date.now();
+    if (!accessToken) {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, 2000 - elapsed);
+      setTimeout(() => setRefreshing(false), remaining);
+      return;
+    }
     try {
       const remote = await fetchChats(accessToken, { skip: 0, limit: 5 });
       if (Array.isArray(remote)) {
@@ -477,11 +482,10 @@ const MyTripsScreen = ({ navigation }) => {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={hydrateRemoteChats}
-                tintColor="transparent"
-                colors={["transparent"]}
-                progressBackgroundColor="transparent"
-                style={styles.hiddenRefresh}
-                progressViewOffset={-1000}
+                tintColor="rgba(0,0,0,0)"
+                colors={["rgba(0,0,0,0)"]}
+                progressBackgroundColor="rgba(0,0,0,0)"
+                progressViewOffset={-5000}
               />
             }
             alwaysBounceVertical
@@ -506,11 +510,10 @@ const MyTripsScreen = ({ navigation }) => {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={hydrateRemoteChats}
-                tintColor="transparent"
-                colors={["transparent"]}
-                progressBackgroundColor="transparent"
-                style={styles.hiddenRefresh}
-                progressViewOffset={-1000}
+                tintColor="rgba(0,0,0,0)"
+                colors={["rgba(0,0,0,0)"]}
+                progressBackgroundColor="rgba(0,0,0,0)"
+                progressViewOffset={-5000}
               />
             }
             alwaysBounceVertical
