@@ -10,9 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { ChevronLeft, ShieldCheck, Gauge, Users } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
+import PassengersForm, { createPassenger } from "../components/PassengersForm";
 import { formatCurrency } from "../utils/format";
 import { useCurrencyConverter } from "../hooks/useCurrencyConverter";
 import { SPACING, BORDER_RADIUS } from "../theme";
@@ -21,7 +25,7 @@ import { usePremiumAlert } from "../components/PremiumAlert";
 const HERTZ_BLACK = "#111111";
 const HERTZ_YELLOW = "#f9d342";
 const PLACEHOLDER_IMAGE =
-  "https://images.unsplash.com/photo-1549923746-1235e86aa2f6?auto=format&fit=crop&w=1200&q=80";
+  "https://www.hertz.com/content/dam/hertz/global/deals/hidden/save-up-to-30-now/xmas25.jpg";
 
 const HertzCheckoutClone = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
@@ -35,10 +39,13 @@ const HertzCheckoutClone = ({ route, navigation }) => {
   const providerName = data.company ?? "Hertz";
   const pickup = data.pickup_time ?? "Oct 11 • 10:00 AM";
   const dropoff = data.dropoff_time ?? "Oct 15 • 08:00 AM";
-  const location = data.location ?? data.pickup_location ?? "San Francisco Intl";
-  const passengers = data.seats ?? data.passengers ?? "5 seats";
+  const location =
+    data.location ?? data.pickup_location ?? "San Francisco Intl";
+  const seatsLabel = data.seats ?? data.passengers ?? "5 seats";
   const transmission = data.transmission ?? "Automatic";
-  const imageSource = data.image ? { uri: data.image } : { uri: PLACEHOLDER_IMAGE };
+  const imageSource = data.image
+    ? { uri: data.image }
+    : { uri: PLACEHOLDER_IMAGE };
 
   const { convertCurrency, targetCurrency } = useCurrencyConverter();
   const displayCurrency = targetCurrency || currency;
@@ -49,6 +56,18 @@ const HertzCheckoutClone = ({ route, navigation }) => {
   const taxes = subtotal * 0.15;
   const twosFee = subtotal * 0.05;
   const total = subtotal + taxes + twosFee;
+  const maxPassengers = Math.max(
+    parseInt(
+      data.seats ??
+        data.passengers ??
+        data.maxPassengers ??
+        data.max_passengers ??
+        data.capacity ??
+        5,
+      10
+    ) || 1,
+    1
+  );
 
   const [traveler, setTraveler] = useState({
     name: data.traveler ?? "",
@@ -56,6 +75,9 @@ const HertzCheckoutClone = ({ route, navigation }) => {
     countryCode: data.countryCode ?? "+1",
     phone: data.phone ?? "",
   });
+  const [passengers, setPassengers] = useState([
+    createPassenger({ type: "driver" }),
+  ]);
 
   const travelerValid =
     traveler.name.trim().length > 0 &&
@@ -124,88 +146,101 @@ const HertzCheckoutClone = ({ route, navigation }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Passengers</Text>
-          <PassengersForm
-            value={passengers}
-            onChange={setPassengers}
-            maxCount={maxPassengers}
-            showTypeToggle={false}
-          />
-        </View>
-        <View style={styles.heroCard}>
-          <Image source={imageSource} style={styles.carImage} resizeMode="cover" />
-          <View style={styles.heroBody}>
-            <Text style={styles.heroTitle}>{carName}</Text>
-            <Text style={styles.heroSubtitle}>{location}</Text>
-            <View style={styles.heroBadges}>
-              <View style={styles.badge}>
-                <Gauge size={14} color={HERTZ_BLACK} />
-                <Text style={styles.badgeText}>{transmission}</Text>
-              </View>
-              <View style={styles.badge}>
-                <Users size={14} color={HERTZ_BLACK} />
-                <Text style={styles.badgeText}>{passengers}</Text>
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Passengers</Text>
+            <PassengersForm
+              value={passengers}
+              onChange={setPassengers}
+              maxCount={maxPassengers}
+              showTypeToggle={false}
+            />
+          </View>
+          <View style={styles.heroCard}>
+            <Image
+              source={imageSource}
+              style={styles.carImage}
+              resizeMode="cover"
+            />
+            <View style={styles.heroBody}>
+              <Text style={styles.heroTitle}>{carName}</Text>
+              <Text style={styles.heroSubtitle}>{location}</Text>
+              <View style={styles.heroBadges}>
+                <View style={styles.badge}>
+                  <Gauge size={14} color={HERTZ_BLACK} />
+                  <Text style={styles.badgeText}>{transmission}</Text>
+                </View>
+                <View style={styles.badge}>
+                  <Users size={14} color={HERTZ_BLACK} />
+                  <Text style={styles.badgeText}>{seatsLabel}</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Pickup & return</Text>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Pickup</Text>
-            <Text style={styles.detailValue}>{pickup}</Text>
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Pickup & return</Text>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Pickup</Text>
+              <Text style={styles.detailValue}>{pickup}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Return</Text>
+              <Text style={styles.detailValue}>{dropoff}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Location</Text>
+              <Text style={styles.detailValue}>{location}</Text>
+            </View>
           </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Return</Text>
-            <Text style={styles.detailValue}>{dropoff}</Text>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Price summary</Text>
+            <SummaryRow
+              label={`Daily rate × ${rentalDays} days`}
+              value={formatCurrency(subtotal, displayCurrency)}
+            />
+            <SummaryRow
+              label="Taxes & fees"
+              value={formatCurrency(taxes, displayCurrency)}
+            />
+            <SummaryRow
+              label="TWOS service fee (5%)"
+              value={formatCurrency(twosFee, displayCurrency)}
+            />
+            <SummaryRow
+              label="Total due"
+              value={formatCurrency(total, displayCurrency)}
+              bold
+            />
           </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Location</Text>
-            <Text style={styles.detailValue}>{location}</Text>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Driver information</Text>
+            <TravelerDetailsForm
+              value={traveler}
+              onChange={setTraveler}
+              title={null}
+            />
           </View>
-        </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Price summary</Text>
-          <SummaryRow
-            label={`Daily rate × ${rentalDays} days`}
-            value={formatCurrency(subtotal, displayCurrency)}
-          />
-          <SummaryRow
-            label="Taxes & fees"
-            value={formatCurrency(taxes, displayCurrency)}
-          />
-          <SummaryRow
-            label="TWOS service fee (5%)"
-            value={formatCurrency(twosFee, displayCurrency)}
-          />
-          <SummaryRow
-            label="Total due"
-            value={formatCurrency(total, displayCurrency)}
-            bold
-          />
-        </View>
+          <View style={styles.notice}>
+            <ShieldCheck size={16} color={HERTZ_BLACK} />
+            <Text style={styles.noticeText}>
+              Free cancellation up to 48 hours before pickup • Hertz Gold Member
+              perks included.
+            </Text>
+          </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Driver information</Text>
-          <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
-        </View>
-
-        <View style={styles.notice}>
-          <ShieldCheck size={16} color={HERTZ_BLACK} />
-          <Text style={styles.noticeText}>
-            Free cancellation up to 48 hours before pickup • Hertz Gold Member perks included.
-          </Text>
-        </View>
-
-        <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.9}>
-          <Text style={styles.payBtnText}>
-            Confirm • {formatCurrency(total, displayCurrency)}
-          </Text>
-        </TouchableOpacity>
-        {premiumAlert}
+          <TouchableOpacity
+            style={styles.payBtn}
+            onPress={handlePay}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.payBtnText}>
+              Confirm • {formatCurrency(total, displayCurrency)}
+            </Text>
+          </TouchableOpacity>
+          {premiumAlert}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -217,7 +252,9 @@ export default HertzCheckoutClone;
 const SummaryRow = ({ label, value, bold = false }) => (
   <View style={styles.summaryRow}>
     <Text style={styles.summaryLabel}>{label}</Text>
-    <Text style={[styles.summaryValue, bold && styles.summaryValueBold]}>{value}</Text>
+    <Text style={[styles.summaryValue, bold && styles.summaryValueBold]}>
+      {value}
+    </Text>
   </View>
 );
 

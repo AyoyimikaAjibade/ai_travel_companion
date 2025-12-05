@@ -16,6 +16,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import Animated, { FadeInDown, FadeInUp, Layout } from "react-native-reanimated";
 import { ArrowLeft } from "lucide-react-native";
 import GradientBackground from "../components/GradientBackground";
 import { GRADIENTS, SPACING, COLORS, BORDER_RADIUS } from "../theme";
@@ -198,14 +199,22 @@ const ProfileScreen = ({ navigation }) => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.header}>
+            <Animated.View
+              style={styles.header}
+              entering={FadeInDown.duration(320)}
+              layout={Layout.springify().damping(18)}
+            >
               <Text style={styles.title}>Your profile</Text>
               <Text style={styles.subtitle}>
                 Keep your account details up to date.
               </Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.card}>
+            <Animated.View
+              style={styles.card}
+              entering={FadeInUp.delay(120)}
+              layout={Layout.springify().damping(18)}
+            >
               {loading ? (
                 <View style={styles.loadingWrap}>
                   <ActivityIndicator color="#fff" />
@@ -349,7 +358,7 @@ const ProfileScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </>
               )}
-            </View>
+            </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

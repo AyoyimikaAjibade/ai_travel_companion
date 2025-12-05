@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInDown, FadeInUp, Layout } from "react-native-reanimated";
 import { SPACING } from "../theme";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
@@ -186,7 +187,11 @@ const BookingCheckoutClone = ({ route, navigation }) => {
           keyboardShouldPersistTaps="handled"
         >
           {/* Property card */}
-          <View style={styles.card}>
+          <Animated.View
+            style={styles.card}
+            entering={FadeInDown.duration(320)}
+            layout={Layout.springify()}
+          >
             <View style={styles.rowCenter}>
               <Image
                 source={{
@@ -210,10 +215,14 @@ const BookingCheckoutClone = ({ route, navigation }) => {
                 Free cancellation until {data.freeCancelUntil ?? "24 hours before arrival"}
               </Text>
             </View>
-          </View>
+          </Animated.View>
 
           {/* Stay details */}
-          <View style={styles.card}>
+          <Animated.View
+            style={styles.card}
+            entering={FadeInDown.delay(80)}
+            layout={Layout.springify().damping(18)}
+          >
             <Text style={styles.sectionTitle}>Stay details</Text>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Check-in</Text>
@@ -233,10 +242,14 @@ const BookingCheckoutClone = ({ route, navigation }) => {
                 {data.roomType ?? "Deluxe Double Room"}
               </Text>
             </View>
-          </View>
+          </Animated.View>
 
           {/* Price summary card */}
-          <View style={styles.card}>
+          <Animated.View
+            style={styles.card}
+            entering={FadeInDown.delay(140)}
+            layout={Layout.springify().damping(20)}
+          >
             <Text style={styles.sectionTitle}>Price summary</Text>
 
             <View style={styles.feeRow}>
@@ -268,9 +281,13 @@ const BookingCheckoutClone = ({ route, navigation }) => {
                 {formatCurrency(total, displayCurrency)}
               </Text>
             </View>
-          </View>
+          </Animated.View>
 
-          <View style={styles.card}>
+          <Animated.View
+            style={styles.card}
+            entering={FadeInDown.delay(200)}
+            layout={Layout.springify()}
+          >
             <Text style={styles.sectionTitle}>
               Guests ({passengers.length}/{maxGuests})
             </Text>
@@ -283,9 +300,13 @@ const BookingCheckoutClone = ({ route, navigation }) => {
               </View>
             ))}
             <Text style={styles.guestHint}>Max guests per room: {maxGuests}</Text>
-          </View>
+          </Animated.View>
 
-          <View style={styles.passengerCard}>
+          <Animated.View
+            style={styles.passengerCard}
+            entering={FadeInDown.delay(260)}
+            layout={Layout.springify().damping(16)}
+          >
             <Text style={styles.sectionTitle}>Guests</Text>
             <PassengersForm
               value={passengers}
@@ -293,20 +314,28 @@ const BookingCheckoutClone = ({ route, navigation }) => {
               maxCount={maxGuests}
               showTypeToggle={false}
             />
-          </View>
+          </Animated.View>
 
-          <View style={styles.card}>
+          <Animated.View
+            style={styles.card}
+            entering={FadeInDown.delay(300)}
+            layout={Layout.springify().damping(14)}
+          >
             <Text style={styles.sectionTitle}>Reservation contact</Text>
             <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
-          </View>
+          </Animated.View>
 
           {/* Cancellation / notice */}
-          <View style={styles.notice}>
+          <Animated.View
+            style={styles.notice}
+            entering={FadeInUp.delay(340)}
+            layout={Layout.springify()}
+          >
             <Text style={styles.noticeText}>
               Free cancellation until Nov 1 • This is a simulated Booking.com
               checkout.
             </Text>
-          </View>
+          </Animated.View>
 
           {/* spacing so CTA isn't covered */}
           <View style={{ height: 180 }} />
@@ -315,7 +344,11 @@ const BookingCheckoutClone = ({ route, navigation }) => {
 
           {/* Sticky bottom CTA: anchored to bottom of safeBody */}
           <View style={styles.stickyWrap} pointerEvents="box-none">
-            <View style={styles.stickyInner}>
+            <Animated.View
+              style={styles.stickyInner}
+              entering={FadeInUp.delay(180)}
+              layout={Layout.springify()}
+            >
               <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>Total</Text>
                 <Text style={styles.priceValue}>
@@ -333,7 +366,7 @@ const BookingCheckoutClone = ({ route, navigation }) => {
                   Confirm • {formatCurrency(total, displayCurrency)}
                 </Text>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>

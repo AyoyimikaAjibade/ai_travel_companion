@@ -1,5 +1,5 @@
 // src/components/PassengersForm.js
-import React from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,15 @@ import {
   StyleSheet,
 } from "react-native";
 import { Plus, Minus } from "lucide-react-native";
+import Animated, {
+  FadeInDown,
+  Layout,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { SPACING, BORDER_RADIUS, COLORS } from "../theme";
 
 export const createPassenger = (overrides = {}) => ({
@@ -37,6 +46,19 @@ export default function PassengersForm({
     Array.isArray(value) && value.length ? value : [createPassenger()];
 
   const canAddMore = passengers.length < maxCount;
+  const addBtnScale = useSharedValue(1);
+
+  useEffect(() => {
+    // Gentle pulse when the passenger list changes
+    addBtnScale.value = withSequence(
+      withTiming(0.95, { duration: 110 }),
+      withSpring(1, { damping: 12 })
+    );
+  }, [passengers.length, addBtnScale]);
+
+  const addBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: addBtnScale.value }],
+  }));
 
   const updatePassenger = (index, updates) => {
     const next = passengers.map((passenger, idx) =>
@@ -72,9 +94,11 @@ export default function PassengersForm({
       </View>
 
       {passengers.map((passenger, index) => (
-        <View
+        <Animated.View
           key={passenger.id ?? `passenger-${index}`}
           style={styles.passengerCard}
+          entering={FadeInDown.delay(index * 80)}
+          layout={Layout.springify().damping(16)}
         >
           <View style={styles.row}>
             <View style={styles.inputBlock}>
@@ -137,18 +161,20 @@ export default function PassengersForm({
               </TouchableOpacity>
             ) : null}
           </View>
-        </View>
+        </Animated.View>
       ))}
 
       {canAddMore ? (
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={handleAdd}
-          activeOpacity={0.88}
-        >
-          <Plus size={16} color={COLORS.text} />
-          <Text style={styles.addText}>Add passenger</Text>
-        </TouchableOpacity>
+        <Animated.View style={addBtnStyle}>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={handleAdd}
+            activeOpacity={0.88}
+          >
+            <Plus size={16} color={COLORS.text} />
+            <Text style={styles.addText}>Add passenger</Text>
+          </TouchableOpacity>
+        </Animated.View>
       ) : null}
     </View>
   );

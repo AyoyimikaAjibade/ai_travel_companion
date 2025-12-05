@@ -16,7 +16,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import Animated, { FadeIn, Layout } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown, Layout } from "react-native-reanimated";
 import { formatDistanceToNow } from "date-fns";
 import { Pencil, Trash2, MessageCircle } from "lucide-react-native";
 import EmptyState from "../components/EmptyState";
@@ -468,12 +468,16 @@ const MyTripsScreen = ({ navigation }) => {
             />
           </View>
         )}
-        <View style={styles.header}>
+        <Animated.View
+          style={styles.header}
+          entering={FadeInDown.duration(320)}
+          layout={Layout.springify().damping(18)}
+        >
           <Text style={styles.title}>Your trips</Text>
           <Text style={styles.subtitle}>
             Continue planning or revisit bookings you’ve already confirmed.
           </Text>
-        </View>
+        </Animated.View>
 
         {sections.length === 0 ? (
           <ScrollView

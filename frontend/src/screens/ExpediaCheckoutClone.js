@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInDown, FadeInUp, Layout } from "react-native-reanimated";
 import { formatCurrency } from "../utils/format";
 import { ChevronLeft, ShieldCheck } from "lucide-react-native";
 import TravelerDetailsForm from "../components/TravelerDetailsForm";
@@ -288,7 +289,7 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.topBar}>
+        <Animated.View style={styles.topBar} entering={FadeInDown.duration(260)}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation.goBack()}
@@ -298,7 +299,7 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
           </TouchableOpacity>
           <Text style={styles.topTitle}>Expedia checkout</Text>
           <View style={{ width: 36 }} />
-        </View>
+        </Animated.View>
 
         <ScrollView
           contentContainerStyle={[
@@ -308,7 +309,11 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.tripCard}>
+          <Animated.View
+            style={styles.tripCard}
+            entering={FadeInDown.delay(40)}
+            layout={Layout.springify().damping(16)}
+          >
             <Text style={styles.sectionLabel}>Review your trip</Text>
             <Text style={styles.flightTitle}>{routeLabel}</Text>
             <Text style={styles.flightMeta}>
@@ -336,9 +341,13 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
               <ShieldCheck size={16} color="#1c4ed8" />
               <Text style={styles.badgeText}>Free 24h cancellation (demo)</Text>
             </View>
-          </View>
+          </Animated.View>
 
-          <View style={styles.summaryCard}>
+          <Animated.View
+            style={styles.summaryCard}
+            entering={FadeInDown.delay(100)}
+            layout={Layout.springify().damping(16)}
+          >
             <Text style={styles.sectionLabel}>Passengers</Text>
             {passengers.map((passenger, index) => (
               <SummaryRow
@@ -350,9 +359,13 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
               />
             ))}
             <Text style={styles.cabinHint}>{`Max passengers: ${maxPassengers}`}</Text>
-          </View>
+          </Animated.View>
 
-          <View style={styles.summaryCard}>
+          <Animated.View
+            style={styles.summaryCard}
+            entering={FadeInDown.delay(140)}
+            layout={Layout.springify().damping(16)}
+          >
             <Text style={styles.sectionLabel}>Cabin class</Text>
             <View style={styles.cabinOptions}>
               {CABIN_OPTIONS.map((option) => {
@@ -385,9 +398,13 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
             <Text style={styles.cabinHint}>
               {`Per passenger: ${pricePerPassengerLabel}`}
             </Text>
-          </View>
+          </Animated.View>
 
-        <View style={styles.summaryCard}>
+        <Animated.View
+          style={styles.summaryCard}
+          entering={FadeInDown.delay(180)}
+          layout={Layout.springify().damping(16)}
+        >
           <Text style={styles.sectionLabel}>Price summary</Text>
           <SummaryRow
             label={`Fare (${passengerCount} × ${pricePerPassengerLabel})`}
@@ -409,27 +426,40 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
             value={formatCurrency(total, displayCurrency)}
             bold
           />
-        </View>
+        </Animated.View>
 
-        <View style={styles.passengerCard}>
+        <Animated.View
+          style={styles.passengerCard}
+          entering={FadeInDown.delay(220)}
+          layout={Layout.springify().damping(16)}
+        >
           <Text style={styles.sectionLabel}>Passengers</Text>
           <PassengersForm
             value={passengers}
             onChange={setPassengers}
             maxCount={maxPassengers}
           />
-        </View>
+        </Animated.View>
 
-        <View style={styles.summaryCard}>
+        <Animated.View
+          style={styles.summaryCard}
+          entering={FadeInDown.delay(260)}
+          layout={Layout.springify().damping(16)}
+        >
           <Text style={styles.sectionLabel}>Traveler contact</Text>
           <TravelerDetailsForm value={traveler} onChange={setTraveler} title={null} />
-        </View>
+        </Animated.View>
 
-          <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.9}>
-            <Text style={styles.payBtnText}>
-              Continue • {formatCurrency(total, displayCurrency)}
-            </Text>
-          </TouchableOpacity>
+          <Animated.View
+            entering={FadeInUp.delay(320)}
+            layout={Layout.springify()}
+          >
+            <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.9}>
+              <Text style={styles.payBtnText}>
+                Continue • {formatCurrency(total, displayCurrency)}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
           {premiumAlert}
         </ScrollView>
       </KeyboardAvoidingView>
