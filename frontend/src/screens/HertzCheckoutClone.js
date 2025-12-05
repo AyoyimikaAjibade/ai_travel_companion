@@ -124,6 +124,15 @@ const HertzCheckoutClone = ({ route, navigation }) => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Passengers</Text>
+          <PassengersForm
+            value={passengers}
+            onChange={setPassengers}
+            maxCount={maxPassengers}
+            showTypeToggle={false}
+          />
+        </View>
         <View style={styles.heroCard}>
           <Image source={imageSource} style={styles.carImage} resizeMode="cover" />
           <View style={styles.heroBody}>

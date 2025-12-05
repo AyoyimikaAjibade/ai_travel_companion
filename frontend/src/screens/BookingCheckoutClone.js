@@ -285,12 +285,8 @@ const BookingCheckoutClone = ({ route, navigation }) => {
             <Text style={styles.guestHint}>Max guests per room: {maxGuests}</Text>
           </View>
 
-          <View
-            style={{
-              marginTop: SPACING.md,
-              marginHorizontal: SPACING.md,
-            }}
-          >
+          <View style={styles.passengerCard}>
+            <Text style={styles.sectionTitle}>Guests</Text>
             <PassengersForm
               value={passengers}
               onChange={setPassengers}
@@ -384,25 +380,24 @@ const styles = StyleSheet.create({
   },
 
   // body section must be white and fill remaining space
-  safeBody: { flex: 1, backgroundColor: "#fff" },
+  safeBody: { flex: 1, backgroundColor: "#111827" },
 
   scroll: {
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.lg,
-    backgroundColor: "#fff",
   },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 12,
     padding: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
-    borderColor: "#f0f0f0",
+    borderColor: "rgba(255,255,255,0.08)",
     shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 1,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 2,
   },
 
   rowCenter: { flexDirection: "row", alignItems: "center" },
@@ -411,10 +406,10 @@ const styles = StyleSheet.create({
     width: 120,
     height: 84,
     borderRadius: 8,
-    backgroundColor: "#eee",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  hotelName: { fontSize: 16, fontWeight: "700", color: "#111" },
-  hotelMeta: { color: "#666", marginTop: 4 },
+  hotelName: { fontSize: 16, fontWeight: "700", color: "#fff" },
+  hotelMeta: { color: "rgba(255,255,255,0.7)", marginTop: 4 },
   badgeRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -426,7 +421,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#111",
+    color: "#fff",
     marginBottom: 8,
   },
 
@@ -435,16 +430,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 8,
   },
-  detailLabel: { color: "#444" },
-  detailValue: { color: "#222", fontWeight: "600" },
+  detailLabel: { color: "rgba(255,255,255,0.7)" },
+  detailValue: { color: "#fff", fontWeight: "600" },
 
   feeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 6,
   },
-  feeLabel: { color: "#555" },
-  feeValue: { color: "#111" },
+  feeLabel: { color: "rgba(255,255,255,0.7)" },
+  feeValue: { color: "#fff" },
 
   guestRow: {
     flexDirection: "row",
@@ -473,17 +468,17 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
 
-  totalLabel: { fontSize: 15, fontWeight: "700", color: "#111" },
-  totalValue: { fontSize: 16, fontWeight: "900", color: BOOKING_BLUE },
+  totalLabel: { fontSize: 15, fontWeight: "700", color: "#fff" },
+  totalValue: { fontSize: 16, fontWeight: "900", color: BOOKING_YELLOW },
 
   notice: {
-    backgroundColor: "#f0f6ff",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 10,
     padding: SPACING.md,
     marginHorizontal: SPACING.md,
     marginTop: 0,
   },
-  noticeText: { color: BOOKING_BLUE },
+  noticeText: { color: "#fff" },
 
   /* Sticky CTA */
   stickyWrap: {
@@ -497,9 +492,9 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   stickyInner: {
-    backgroundColor: "#fff",
+    backgroundColor: "#0f172a",
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    borderTopColor: "rgba(255,255,255,0.1)",
     paddingTop: SPACING.sm,
   },
   priceRow: {
@@ -508,8 +503,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 4,
   },
-  priceLabel: { color: "#666" },
-  priceValue: { color: "#111", fontWeight: "800", fontSize: 16 },
+  priceLabel: { color: "rgba(255,255,255,0.75)" },
+  priceValue: { color: "#fff", fontWeight: "800", fontSize: 16 },
 
   cta: {
     marginTop: SPACING.sm,
@@ -519,5 +514,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  ctaText: { color: BOOKING_BLUE, fontSize: 16, fontWeight: "900" },
+  ctaText: { color: "#0f172a", fontSize: 16, fontWeight: "900" },
 });

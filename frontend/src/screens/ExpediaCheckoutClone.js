@@ -411,7 +411,8 @@ const ExpediaCheckoutClone = ({ route, navigation }) => {
           />
         </View>
 
-        <View style={{ marginBottom: 16, marginHorizontal: 20 }}>
+        <View style={styles.passengerCard}>
+          <Text style={styles.sectionLabel}>Passengers</Text>
           <PassengersForm
             value={passengers}
             onChange={setPassengers}
@@ -525,6 +526,16 @@ const styles = StyleSheet.create({
     color: "#cbd5e1",
     fontSize: 13,
     marginTop: 6,
+  },
+  passengerCard: {
+    backgroundColor: "rgba(11,28,66,0.8)",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(79,139,255,0.15)",
+    marginHorizontal: 20,
+    marginBottom: 16,
+    gap: 8,
   },
   badgeRow: {
     flexDirection: "row",

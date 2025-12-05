@@ -162,6 +162,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
     padding: SPACING.lg,
     gap: SPACING.md,
+    marginBottom: SPACING.md,
   },
   headerRow: {
     flexDirection: "row",
