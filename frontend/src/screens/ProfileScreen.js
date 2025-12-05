@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import {
   SafeAreaView,
@@ -186,145 +187,170 @@ const ProfileScreen = ({ navigation }) => {
 
         <KeyboardAvoidingView
           style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          // keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
         >
-          <View style={styles.header}>
-            <Text style={styles.title}>Your profile</Text>
-            <Text style={styles.subtitle}>
-              Keep your account details up to date.
-            </Text>
-          </View>
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: insets.bottom + SPACING.xl },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.header}>
+              <Text style={styles.title}>Your profile</Text>
+              <Text style={styles.subtitle}>
+                Keep your account details up to date.
+              </Text>
+            </View>
 
-          <View style={styles.card}>
-            {loading ? (
-              <View style={styles.loadingWrap}>
-                <ActivityIndicator color="#fff" />
-              </View>
-            ) : (
-              <>
-                <Text style={styles.groupTitle}>Profile details</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Username</Text>
-                  <TextInput
-                    value={form.username}
-                    onChangeText={handleChange("username")}
-                    placeholder="Username"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    style={styles.input}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="username"
-                  />
+            <View style={styles.card}>
+              {loading ? (
+                <View style={styles.loadingWrap}>
+                  <ActivityIndicator color="#fff" />
                 </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Email</Text>
-                  <TextInput
-                    value={form.email}
-                    onChangeText={handleChange("email")}
-                    placeholder="Email"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    style={styles.input}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                  />
-                </View>
-
-                <View style={styles.rowInputs}>
-                  <View
-                    style={[styles.inputGroup, styles.rowInput, styles.rowInputLeft]}
-                  >
-                    <Text style={styles.label}>First name</Text>
+              ) : (
+                <>
+                  <Text style={styles.groupTitle}>Profile details</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Username</Text>
                     <TextInput
-                      value={form.firstName}
-                      onChangeText={handleChange("firstName")}
-                      placeholder="First name"
+                      value={form.username}
+                      onChangeText={handleChange("username")}
+                      placeholder="Username"
                       placeholderTextColor="rgba(255,255,255,0.4)"
                       style={styles.input}
-                      autoCapitalize="words"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      textContentType="username"
+                      returnKeyType="next"
                     />
                   </View>
 
-                  <View
-                    style={[styles.inputGroup, styles.rowInput, styles.rowInputRight]}
-                  >
-                    <Text style={styles.label}>Last name</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Email</Text>
                     <TextInput
-                      value={form.lastName}
-                      onChangeText={handleChange("lastName")}
-                      placeholder="Last name"
+                      value={form.email}
+                      onChangeText={handleChange("email")}
+                      placeholder="Email"
                       placeholderTextColor="rgba(255,255,255,0.4)"
                       style={styles.input}
-                      autoCapitalize="words"
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      textContentType="emailAddress"
+                      returnKeyType="next"
                     />
                   </View>
-                </View>
 
-                <TouchableOpacity
-                  onPress={handleUpdate}
-                  style={[
-                    styles.updateBtn,
-                    (!isDirty || saving) && styles.updateBtnDisabled,
-                  ]}
-                  activeOpacity={0.85}
-                  disabled={!isDirty || saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.updateText}>Update profile</Text>
-                  )}
-                </TouchableOpacity>
+                  <View style={styles.rowInputs}>
+                    <View
+                      style={[
+                        styles.inputGroup,
+                        styles.rowInput,
+                        styles.rowInputLeft,
+                      ]}
+                    >
+                      <Text style={styles.label}>First name</Text>
+                      <TextInput
+                        value={form.firstName}
+                        onChangeText={handleChange("firstName")}
+                        placeholder="First name"
+                        placeholderTextColor="rgba(255,255,255,0.4)"
+                        style={styles.input}
+                        autoCapitalize="words"
+                        returnKeyType="next"
+                      />
+                    </View>
 
-                <View style={styles.divider} />
+                    <View
+                      style={[
+                        styles.inputGroup,
+                        styles.rowInput,
+                        styles.rowInputRight,
+                      ]}
+                    >
+                      <Text style={styles.label}>Last name</Text>
+                      <TextInput
+                        value={form.lastName}
+                        onChangeText={handleChange("lastName")}
+                        placeholder="Last name"
+                        placeholderTextColor="rgba(255,255,255,0.4)"
+                        style={styles.input}
+                        autoCapitalize="words"
+                        returnKeyType="next"
+                      />
+                    </View>
+                  </View>
 
-                <Text style={styles.groupTitle}>Change password</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Current password</Text>
-                  <TextInput
-                    value={passwordForm.currentPassword}
-                    onChangeText={handlePasswordFieldChange("currentPassword")}
-                    placeholder="Current password"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    style={styles.input}
-                    secureTextEntry
-                    textContentType="password"
-                  />
-                </View>
+                  <TouchableOpacity
+                    onPress={handleUpdate}
+                    style={[
+                      styles.updateBtn,
+                      (!isDirty || saving) && styles.updateBtnDisabled,
+                    ]}
+                    activeOpacity={0.85}
+                    disabled={!isDirty || saving}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.updateText}>Update profile</Text>
+                    )}
+                  </TouchableOpacity>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>New password</Text>
-                  <TextInput
-                    value={passwordForm.newPassword}
-                    onChangeText={handlePasswordFieldChange("newPassword")}
-                    placeholder="New password"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                    style={styles.input}
-                    secureTextEntry
-                    textContentType="newPassword"
-                  />
-                </View>
+                  <View style={styles.divider} />
 
-                <TouchableOpacity
-                  onPress={handlePasswordChange}
-                  style={[
-                    styles.updateBtn,
-                    (!canChangePassword || changingPassword) &&
-                      styles.updateBtnDisabled,
-                  ]}
-                  activeOpacity={0.85}
-                  disabled={!canChangePassword || changingPassword}
-                >
-                  {changingPassword ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.updateText}>Update password</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+                  <Text style={styles.groupTitle}>Change password</Text>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Current password</Text>
+                    <TextInput
+                      value={passwordForm.currentPassword}
+                      onChangeText={handlePasswordFieldChange("currentPassword")}
+                      placeholder="Current password"
+                      placeholderTextColor="rgba(255,255,255,0.4)"
+                      style={styles.input}
+                      secureTextEntry
+                      textContentType="password"
+                      returnKeyType="next"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>New password</Text>
+                    <TextInput
+                      value={passwordForm.newPassword}
+                      onChangeText={handlePasswordFieldChange("newPassword")}
+                      placeholder="New password"
+                      placeholderTextColor="rgba(255,255,255,0.4)"
+                      style={styles.input}
+                      secureTextEntry
+                      textContentType="newPassword"
+                      returnKeyType="done"
+                      onSubmitEditing={handlePasswordChange}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={handlePasswordChange}
+                    style={[
+                      styles.updateBtn,
+                      (!canChangePassword || changingPassword) &&
+                        styles.updateBtnDisabled,
+                    ]}
+                    activeOpacity={0.85}
+                    disabled={!canChangePassword || changingPassword}
+                  >
+                    {changingPassword ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.updateText}>Update password</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </GradientBackground>
