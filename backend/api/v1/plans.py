@@ -42,7 +42,12 @@ def get_chat_plans(
         )
     
     plans = plan_service.get_chat_plans(db, chat_id, skip=skip, limit=limit)
-    return plans
+    result = []
+    for plan in plans:
+        plan_dict = plan.dict() if hasattr(plan, 'dict') else plan.model_dump()
+        plan_dict['status'] = chat.status
+        result.append(plan_dict)
+    return result
 
 
 @router.get("/{plan_id}", response_model=Plan)
@@ -77,7 +82,9 @@ def get_plan(
             detail="Not enough permissions"
         )
     
-    return plan
+    plan_dict = plan.dict() if hasattr(plan, 'dict') else plan.model_dump()
+    plan_dict['status'] = chat.status
+    return plan_dict
 
 
 @router.delete("/{plan_id}")

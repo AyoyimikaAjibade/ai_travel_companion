@@ -9,7 +9,7 @@ from uuid import UUID
 
 from dependencies import get_db, get_chat_service
 from services.chat_service import ChatService
-from models.chat import Chat
+from models.chat import Chat, ChatUpdate
 from core.security import get_current_active_user
 from models.user import User
 
@@ -80,7 +80,7 @@ def get_user_chats(
 ) -> Any:
     """Get all chats for the current user."""
     chats = chat_service.get_user_chats(db, current_user.id, skip=skip, limit=limit)
-    return [{"current_slots": _chat_to_current_slots(chat)} for chat in chats]
+    return [{"current_slots": _chat_to_current_slots(chat), "status": chat.status} for chat in chats]
 
 
 @router.get("/{chat_id}")
@@ -110,7 +110,10 @@ def get_chat(
             detail="Not enough permissions"
         )
     
-    return {"current_slots": _chat_to_current_slots(chat)}
+    return {
+        "current_slots": _chat_to_current_slots(chat),
+        "status": chat.status
+    }
 
 
 @router.get("/slot/{slot_id}")
@@ -140,7 +143,55 @@ def get_chat_by_slot_id(
             detail="Not enough permissions"
         )
     
-    return {"current_slots": _chat_to_current_slots(chat)}
+    return {
+        "current_slots": _chat_to_current_slots(chat),
+        "status": chat.status
+    }
+
+
+@router.post("/{chat_id}/cancel")
+def cancel_chat_booking(
+    chat_id: UUID,
+    db: Session = Depends(get_db),
+    chat_service: ChatService = Depends(get_chat_service),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """Cancel a chat booking."""
+    chat = chat_service.get_by_id(db, chat_id)
+    if not chat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found"
+        )
+    
+    if chat.user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This chat belongs to an anonymous user. Please authenticate to access your chats."
+        )
+    
+    if chat.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
+    if chat.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chat booking is already cancelled"
+        )
+    
+    chat_update = ChatUpdate(status="cancelled")
+    updated_chat = chat_service.update_chat(db, chat_id, chat_update)
+    
+    if not updated_chat:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel booking"
+        )
+    
+    return {"message": "Booking cancelled successfully", "status": "cancelled"}
 
 
 @router.delete("/{chat_id}")

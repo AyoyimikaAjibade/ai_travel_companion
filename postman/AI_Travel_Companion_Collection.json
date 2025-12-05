@@ -564,6 +564,31 @@
           }
         },
         {
+          "name": "Cancel Chat Booking",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/chats/{{chat_id}}/cancel",
+              "host": ["{{full_url}}"],
+              "path": ["chats", "{{chat_id}}", "cancel"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Booking cancelled successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Delete Chat",
           "request": {
             "method": "DELETE",

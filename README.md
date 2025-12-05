@@ -405,13 +405,21 @@ The application uses JWT-based authentication with the following features:
 - `GET /api/v1/chats/` - Get user chats
 - `GET /api/v1/chats/{chat_id}` - Get specific chat
 - `GET /api/v1/chats/slot/{slot_id}` - Get chat by AI service slot_id
+- `POST /api/v1/chats/{chat_id}/cancel` - Cancel chat booking
 - `DELETE /api/v1/chats/{chat_id}` - Delete chat
-- `GET /api/v1/chats/{chat_id}/messages` - Get chat messages
+- `GET /api/v1/chats/{chat_id}/messages` - Get chat messages (includes chat_status)
 - `GET /api/v1/chats/slot/{slot_id}/messages` - Get messages by slot_id
 
+**Chat Status Values:**
+- `draft` - Initial state when chat is created
+- `booked` - Booking has been confirmed
+- `confirmed` - Booking is confirmed
+- `cancelled` - Booking has been cancelled
+- `null` - No status set
+
 ### Plan Management
-- `GET /api/v1/plans/chat/{chat_id}` - Get plans for chat
-- `GET /api/v1/plans/{plan_id}` - Get specific plan
+- `GET /api/v1/plans/chat/{chat_id}` - Get plans for chat (includes chat_status)
+- `GET /api/v1/plans/{plan_id}` - Get specific plan (includes chat_status)
 - `DELETE /api/v1/plans/{plan_id}` - Delete plan
 
 ### AI Integration Endpoints

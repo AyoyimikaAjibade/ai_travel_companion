@@ -28,7 +28,6 @@ def get_chat_messages(
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """Get all messages for a specific chat."""
-    # Verify chat exists and user owns it
     chat = chat_service.get_by_id(db, chat_id)
     if not chat:
         raise HTTPException(
@@ -36,7 +35,6 @@ def get_chat_messages(
             detail="Chat not found"
         )
     
-    # Check if user owns the chat (anonymous chats have user_id=None and can't be accessed)
     if chat.user_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -49,7 +47,12 @@ def get_chat_messages(
         )
     
     messages = chat_message_service.get_chat_messages(db, chat_id, skip=skip, limit=limit)
-    return messages
+    result = []
+    for msg in messages:
+        msg_dict = msg.dict() if hasattr(msg, 'dict') else msg.model_dump()
+        msg_dict['status'] = chat.status
+        result.append(msg_dict)
+    return result
 
 
 @router.get("/slot/{slot_id}/messages", response_model=List[ChatMessage])
@@ -84,5 +87,10 @@ def get_messages_by_slot_id(
         )
     
     messages = chat_message_service.get_messages_by_slot_id(db, slot_id, skip=skip, limit=limit)
-    return messages
+    result = []
+    for msg in messages:
+        msg_dict = msg.dict() if hasattr(msg, 'dict') else msg.model_dump()
+        msg_dict['status'] = chat.status
+        result.append(msg_dict)
+    return result
 
