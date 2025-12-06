@@ -14,6 +14,29 @@ from models.user import User
 router = APIRouter()
 
 
+@router.get("/{plan_id}/public", response_model=PlanWithStatus)
+def get_plan_public(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+    plan_service: PlanService = Depends(get_plan_service),
+    chat_service: ChatService = Depends(get_chat_service)
+) -> PlanWithStatus:
+    """Get a plan by ID without authentication."""
+    plan = plan_service.get_by_id(db, plan_id)
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plan not found"
+        )
+    
+    chat = chat_service.get_by_id(db, plan.chat_id)
+    chat_status = chat.status if chat and chat.status else ChatStatus.DRAFT.value
+    
+    plan_dict = plan.dict(exclude_none=False) if hasattr(plan, 'dict') else plan.model_dump(exclude_none=False)
+    plan_dict['status'] = chat_status
+    return PlanWithStatus(**plan_dict)
+
+
 @router.get("/chat/{chat_id}", response_model=List[PlanWithStatus])
 def get_chat_plans(
     chat_id: UUID,

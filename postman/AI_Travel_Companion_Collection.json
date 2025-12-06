@@ -713,6 +713,37 @@
           }
         },
         {
+          "name": "Get Plan by ID (Public)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Plan retrieved successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const responseData = pm.response.json();",
+                  "    if (responseData.plan_id) {",
+                  "        pm.environment.set('plan_id', responseData.plan_id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{full_url}}/plans/{{plan_id}}/public",
+              "host": ["{{full_url}}"],
+              "path": ["plans", "{{plan_id}}", "public"]
+            }
+          }
+        },
+        {
           "name": "Delete Plan",
           "request": {
             "method": "DELETE",
