@@ -18,34 +18,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest,mode=max
+        run: |
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest -f ./Dockerfile .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest
 
       - name: Build and push AI service image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./ai
-          file: ./ai/Dockerfile.ai
-          push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest,mode=max
+        run: |
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest -f ./ai/Dockerfile.ai ./ai
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest
 
       - name: Verify images pushed
         run: |
@@ -93,32 +78,31 @@ jobs:
             fi
             
             # Deploy on VM
-            ssh -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} bash << DEPLOY_SCRIPT
+            ssh -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} bash -s ${DOCKER_HUB_USERNAME} ${DOCKER_HUB_TOKEN} << 'DEPLOY_SCRIPT'
               set -e
+              DOCKER_USER="$1"
+              DOCKER_TOKEN="$2"
               cd ~/ai-travel-companion
               
               echo "🔐 Logging into Docker Hub..."
-              echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin 2>&1 | grep -v "WARNING" || true
+              echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USER" --password-stdin 2>&1 | grep -v "WARNING" || true
               
               echo "📦 Updating docker-compose.yml with image references..."
               
-              # Simple Python script to replace build blocks with image references
-              BACKEND_IMG="$DOCKER_HUB_USERNAME/ai-travel-backend:latest"
-              AI_IMG="$DOCKER_HUB_USERNAME/ai-travel-ai-service:latest"
-              
-              python3 << PYTHON_EOF
+              # Create a simple script file to avoid nested heredoc issues
+              cat > update_compose.py << 'PYEOF'
 import re
+import sys
+
+docker_user = sys.argv[1]
 
 with open('docker-compose.yml', 'r') as f:
     content = f.read()
 
-backend_img = "${BACKEND_IMG}"
-ai_img = "${AI_IMG}"
-
 # Replace backend build block
 content = re.sub(
     r'(\s+backend:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)',
-    r'\1    image: ' + backend_img + r'\n\3',
+    r'\1    image: ' + docker_user + r'/ai-travel-backend:latest\n\3',
     content,
     flags=re.DOTALL
 )
@@ -126,7 +110,7 @@ content = re.sub(
 # Replace ai_service build block
 content = re.sub(
     r'(\s+ai_service:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)',
-    r'\1    image: ' + ai_img + r'\n\3',
+    r'\1    image: ' + docker_user + r'/ai-travel-ai-service:latest\n\3',
     content,
     flags=re.DOTALL
 )
@@ -135,7 +119,10 @@ with open('docker-compose.yml', 'w') as f:
     f.write(content)
 
 print("✅ docker-compose.yml updated successfully")
-PYTHON_EOF
+PYEOF
+              
+              python3 update_compose.py "$DOCKER_USER"
+              rm -f update_compose.py
               
               echo "🛑 Stopping existing containers..."
               docker-compose down || true
