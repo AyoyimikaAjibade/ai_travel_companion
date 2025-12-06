@@ -3,6 +3,7 @@ export default {
   expo: {
     name: "TWOS",
     slug: "twos",
+    owner: "umairdadaa", // ✅ REQUIRED for EAS
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
@@ -31,23 +32,20 @@ export default {
       favicon: "./assets/favicon.png",
     },
 
-    // ✅ EAS Update config
+    // EAS Update configuration
     updates: {
       url: "https://u.expo.dev/3196fc48-06ca-45ba-a4ef-18b63a94ae84",
     },
 
-    // ✅ Runtime version will follow app version (1.0.0)
     runtimeVersion: {
-      policy: "appVersion",
+      policy: "appVersion", // ensures OTA updates match runtime
     },
 
-    // ✅ SDK 54: plugins
     plugins: ["expo-font", "expo-camera"],
 
-    // ✅ EAS project link
     extra: {
       eas: {
-        projectId: "3196fc48-06ca-45ba-a4ef-18b63a94ae84",
+        projectId: "3196fc48-06ca-45ba-a4ef-18b63a94ae84", // linked project ID
       },
     },
   },
