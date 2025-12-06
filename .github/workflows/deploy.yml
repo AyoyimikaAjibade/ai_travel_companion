@@ -92,6 +92,13 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Display SSH key fingerprint (for debugging)
+        run: |
+          echo "SSH key loaded:"
+          ssh-add -l || echo "No keys loaded"
+          echo ""
+          echo "Testing SSH connection..."
+
       - name: Deploy to each VM
         env:
           VM_IPS: ${{ secrets.VM_IPS }}
@@ -103,9 +110,21 @@ jobs:
           for VM_IP in "${VM_ARRAY[@]}"; do
             VM_IP=$(echo "$VM_IP" | xargs)  # Trim whitespace
             echo "🚀 Deploying to VM: $VM_IP"
+            echo "SSH User: $SSH_USER"
             
             # Add VM to known hosts
             ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+            
+            # Test SSH connection first
+            echo "Testing SSH connection..."
+            ssh -v -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} "echo 'SSH connection successful!'" || {
+              echo "❌ SSH connection failed!"
+              echo "Please verify:"
+              echo "1. SSH_PRIVATE_KEY secret matches the public key on the VM"
+              echo "2. SSH_USER secret is correct: $SSH_USER"
+              echo "3. Public key is in ~/.ssh/authorized_keys on the VM"
+              exit 1
+            }
             
             # Create deployment directory on VM
             ssh -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} \
