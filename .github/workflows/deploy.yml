@@ -101,44 +101,41 @@ jobs:
               echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin 2>&1 | grep -v "WARNING" || true
               
               echo "📦 Updating docker-compose.yml with image references..."
-              # Backup original file
-              cp docker-compose.yml docker-compose.yml.bak
               
-              # Use perl for reliable multi-line replacement
+              # Simple Python script to replace build blocks with image references
               BACKEND_IMG="$DOCKER_HUB_USERNAME/ai-travel-backend:latest"
               AI_IMG="$DOCKER_HUB_USERNAME/ai-travel-ai-service:latest"
               
-              perl -i.bak2 -pe "
-                if (/^  backend:/) { \$in_backend = 1; }
-                if (/^  ai_service:/) { \$in_ai = 1; \$in_backend = 0; }
-                if (/^  [a-z_]+:/ && !/^  (backend|ai_service):/) { \$in_backend = 0; \$in_ai = 0; }
-                
-                if (\$in_backend && /^    build:/) {
-                  \$_ = \"    image: $BACKEND_IMG\n\";
-                  \$skip_next = 2;
-                }
-                if (\$in_ai && /^    build:/) {
-                  \$_ = \"    image: $AI_IMG\n\";
-                  \$skip_next = 2;
-                }
-                
-                if (\$skip_next > 0 && /^      (context|dockerfile):/) {
-                  \$skip_next--;
-                  next;
-                }
-                \$skip_next = 0 if /^    [a-z_]/ && !/^    (context|dockerfile|image):/;
-              " docker-compose.yml
-              
-              # Fallback: remove any remaining context/dockerfile lines
-              sed -i.bak3 -e '/^      context:/d' -e '/^      dockerfile:/d' docker-compose.yml
-              
-              # Verify YAML is valid
-              if ! docker-compose config > /dev/null 2>&1; then
-                echo "❌ Error: docker-compose.yml has invalid YAML syntax"
-                echo "Showing problematic section:"
-                docker-compose config 2>&1 | head -20
-                exit 1
-              fi
+              python3 << PYTHON_EOF
+import re
+
+with open('docker-compose.yml', 'r') as f:
+    content = f.read()
+
+backend_img = "${BACKEND_IMG}"
+ai_img = "${AI_IMG}"
+
+# Replace backend build block
+content = re.sub(
+    r'(\s+backend:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)',
+    r'\1    image: ' + backend_img + r'\n\3',
+    content,
+    flags=re.DOTALL
+)
+
+# Replace ai_service build block
+content = re.sub(
+    r'(\s+ai_service:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)',
+    r'\1    image: ' + ai_img + r'\n\3',
+    content,
+    flags=re.DOTALL
+)
+
+with open('docker-compose.yml', 'w') as f:
+    f.write(content)
+
+print("✅ docker-compose.yml updated successfully")
+PYTHON_EOF
               
               echo "🛑 Stopping existing containers..."
               docker-compose down || true
