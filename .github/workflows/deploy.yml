@@ -77,76 +77,52 @@ jobs:
               scp -o StrictHostKeyChecking=no .env.example ${SSH_USER}@${VM_IP}:~/ai-travel-companion/.env 2>/dev/null || true
             fi
             
-            # Deploy on VM
+            # Deploy on VM - using inline commands to avoid nested heredoc issues
             ssh -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} bash -s ${DOCKER_HUB_USERNAME} ${DOCKER_HUB_TOKEN} << 'DEPLOY_SCRIPT'
-              set -e
-              DOCKER_USER="$1"
-              DOCKER_TOKEN="$2"
-              cd ~/ai-travel-companion
-              
-              echo "🔐 Logging into Docker Hub..."
-              echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USER" --password-stdin 2>&1 | grep -v "WARNING" || true
-              
-              echo "📦 Updating docker-compose.yml with image references..."
-              
-              # Create a simple script file to avoid nested heredoc issues
-              cat > update_compose.py << 'PYEOF'
+set -e
+DOCKER_USER="$1"
+DOCKER_TOKEN="$2"
+cd ~/ai-travel-companion
+
+echo "🔐 Logging into Docker Hub..."
+echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USER" --password-stdin 2>&1 | grep -v "WARNING" || true
+
+echo "📦 Updating docker-compose.yml with image references..."
+python3 -c "
 import re
-import sys
-
-docker_user = sys.argv[1]
-
 with open('docker-compose.yml', 'r') as f:
     content = f.read()
-
-# Replace backend build block
-content = re.sub(
-    r'(\s+backend:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)',
-    r'\1    image: ' + docker_user + r'/ai-travel-backend:latest\n\3',
-    content,
-    flags=re.DOTALL
-)
-
-# Replace ai_service build block
-content = re.sub(
-    r'(\s+ai_service:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)',
-    r'\1    image: ' + docker_user + r'/ai-travel-ai-service:latest\n\3',
-    content,
-    flags=re.DOTALL
-)
-
+backend_img = '$DOCKER_USER/ai-travel-backend:latest'
+ai_img = '$DOCKER_USER/ai-travel-ai-service:latest'
+content = re.sub(r'(\s+backend:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)', r'\1    image: ' + backend_img + r'\n\3', content, flags=re.DOTALL)
+content = re.sub(r'(\s+ai_service:.*?\n)(\s+build:.*?\n\s+context:.*?\n\s+dockerfile:.*?\n)(\s+container_name:)', r'\1    image: ' + ai_img + r'\n\3', content, flags=re.DOTALL)
 with open('docker-compose.yml', 'w') as f:
     f.write(content)
+"
 
-print("✅ docker-compose.yml updated successfully")
-PYEOF
-              
-              python3 update_compose.py "$DOCKER_USER"
-              rm -f update_compose.py
-              
-              echo "🛑 Stopping existing containers..."
-              docker-compose down || true
-              
-              echo "⬇️ Pulling latest images..."
-              docker-compose pull || true
-              
-              echo "🚀 Starting services..."
-              docker-compose up -d --remove-orphans
-              
-              echo "⏳ Waiting for services to start..."
-              sleep 15
-              
-              echo "📊 Service status:"
-              docker-compose ps
-              
-              if docker-compose ps | grep -q "Up"; then
-                echo "✅ Deployment successful!"
-              else
-                echo "⚠️ Warning: Some services may not be running"
-                docker-compose ps
-                exit 1
-              fi
-          DEPLOY_SCRIPT
+echo "🛑 Stopping existing containers..."
+docker-compose down || true
+
+echo "⬇️ Pulling latest images..."
+docker-compose pull || true
+
+echo "🚀 Starting services..."
+docker-compose up -d --remove-orphans
+
+echo "⏳ Waiting for services to start..."
+sleep 15
+
+echo "📊 Service status:"
+docker-compose ps
+
+if docker-compose ps | grep -q "Up"; then
+  echo "✅ Deployment successful!"
+else
+  echo "⚠️ Warning: Some services may not be running"
+  docker-compose ps
+  exit 1
+fi
+DEPLOY_SCRIPT
             
             echo "✅ Completed deployment to $VM_IP"
             echo ""
