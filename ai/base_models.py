@@ -36,7 +36,7 @@ class Slots(BaseModel):
     # For Amadeus End
 
     dates: Dates = Dates()
-    pax: Pax = Pax()    #Number of travelers
+    pax: Pax = Pax()    # Number of travelers
     budget: Optional[float] = None
     hotel: HotelPreferences = HotelPreferences()
     car: Optional[bool] = None
