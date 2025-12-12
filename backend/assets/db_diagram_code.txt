@@ -1,119 +1,201 @@
+// ============================================
+// AI Travel Companion - Database Schema
+// Compatible with dbdiagram.io (DBML format)
+// Paste this code into https://dbdiagram.io to visualize
+// ============================================
+
+Project ai_travel_companion {
+  database_type: 'PostgreSQL'
+  Note: '''
+    AI-powered travel planning and booking system.
+    Supports both authenticated and anonymous users.
+  '''
+}
+
+// ============================================
+// User Management & Authentication Tables
+// ============================================
+
 Table users {
-  id uuid [pk, default: `uuid_generate_v4()`]
+  id uuid [pk, default: `gen_random_uuid()`]
   email varchar(255) [unique, not null]
+  username varchar(50) [unique, not null]
   hashed_password varchar(255) [not null]
   first_name varchar(100)
   last_name varchar(100)
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  is_active boolean [default: true, not null]
+  is_superuser boolean [default: false, not null]
+  last_login timestamp
+  created_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  updated_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  
+  Note: 'Core user accounts table. Stores authentication credentials and user profile information.'
 }
 
 Table user_preferences {
-  id uuid [pk, default: `uuid_generate_v4()`]
-  user_id uuid [not null, ref: > users.id]
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, not null]
   preference_type varchar(50) [not null]
-  value jsonb [not null]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-
+  value jsonb [not null, default: `'{}'`]
+  created_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  updated_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  
   indexes {
     (user_id, preference_type) [unique]
   }
+  
+  Note: 'Flexible key-value store for user preferences (theme, notifications, travel preferences, etc.)'
 }
 
-Table trips {
-  id uuid [pk, default: `uuid_generate_v4()`]
-  user_id uuid [not null, ref: > users.id]
+Table token_blacklist {
+  id uuid [pk, default: `gen_random_uuid()`]
+  token_hash varchar(255) [unique, not null]
+  user_id uuid [ref: > users.id, not null]
+  expires_at timestamp [not null]
+  blacklisted_at timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  created_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  updated_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  
+  indexes {
+    token_hash
+    user_id
+    expires_at
+  }
+  
+  Note: 'JWT token blacklist for logout functionality. Stores SHA256 hash of blacklisted tokens.'
+}
+
+// ============================================
+// Chat & Conversation Management Tables
+// ============================================
+
+Table chats {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [ref: > users.id, null]
+  slot_id varchar(26)
   origin_code varchar(3) [not null]
   origin_name varchar(255) [not null]
   destination_code varchar(3) [not null]
   destination_name varchar(255) [not null]
+  destination_city_name varchar(255)
+  destination_city_code varchar(3)
   start_date date [not null]
   end_date date [not null]
-  adults int [default: 1]
+  adults integer [default: 1, not null]
+  kids integer [default: 0]
   budget decimal(10,2)
+  hotel_request boolean
+  hotel_amenities jsonb
+  hotel_rating integer
+  car boolean
+  attractions jsonb
   status varchar(20) [default: 'draft']
-  share_code varchar(10) [unique]
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  share_code varchar(255) [unique]
+  notes text
+  created_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  updated_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  
+  indexes {
+    slot_id
+    share_code
+    user_id
+    created_time
+  }
+  
+  Note: '''
+    Travel chat sessions container.
+    - user_id is nullable to support anonymous users
+    - slot_id links to AI service conversation tracking (ULID format)
+    - status: draft, booked, confirmed, cancelled
+    - share_code allows sharing chats without authentication
+  '''
 }
 
-Table packages {
-  id uuid [pk, default: `uuid_generate_v4()`]
-  trip_id uuid [not null, ref: > trips.id]
+Table chat_messages {
+  id uuid [pk, default: `gen_random_uuid()`]
+  chat_id uuid [ref: > chats.id, not null]
+  role varchar(20) [not null]
+  content text [not null]
+  slot_id varchar(26)
+  message_metadata jsonb
+  ai_response_data jsonb
+  created_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  updated_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  
+  indexes {
+    chat_id
+    slot_id
+    created_time
+  }
+  
+  Note: '''
+    Individual messages in chat conversations.
+    - role: 'user' or 'bot'
+    - slot_id: Links to AI service message tracking
+    - ai_response_data: Stores structured AI response for bot messages
+    - message_metadata: Additional context and metadata
+  '''
+}
+
+// ============================================
+// Travel Plans & Itineraries Tables
+// ============================================
+
+Table plans {
+  plan_id uuid [pk, default: `gen_random_uuid()`]
+  chat_id uuid [ref: > chats.id, not null]
   total_price decimal(10,2) [not null]
   score decimal(5,2)
   explanation text
-  flight_data jsonb
-  hotel_data jsonb
-  car_data jsonb
-  attractions_data jsonb
-  deeplinks jsonb [not null, default: `'{}'`]
+  flight jsonb
+  hotel jsonb
+  car jsonb
+  attractions jsonb
+  deeplinks jsonb [default: `'{}'`]
+  ai_generated boolean [default: false, not null]
+  manual boolean [default: false, not null]
+  created_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  updated_time timestamp [default: `CURRENT_TIMESTAMP`, not null]
+  
+  indexes {
+    chat_id
+    created_time
+  }
+  
+  Note: '''
+    Travel plans generated from chat conversations.
+    - Can be AI-generated (via Gemini/Amadeus) or manually created
+    - Stores flight, hotel, car rental, and attractions as JSON
+    - deeplinks: External booking links for each component
+    - score: AI-assigned relevance score (0-10)
+  '''
 }
 
-Table trip_components {
-  id uuid [pk, default: `uuid_generate_v4()`]
-  trip_id uuid [not null, ref: > trips.id]
-  package_id uuid [not null, ref: > packages.id]
-  type varchar(20) [not null] // 'flight', 'hotel', 'car', 'attraction'
-  details jsonb [not null]
-  status varchar(20) [default: 'pending']
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+// ============================================
+// Table Groups for Visual Organization
+// ============================================
+
+TableGroup "👤 User & Authentication" {
+  users
+  user_preferences
+  token_blacklist
 }
 
-Table booking_references {
-  id uuid [pk, default: `uuid_generate_v4()`]
-  user_id uuid [not null, ref: > users.id]
-  trip_component_id uuid [not null, ref: > trip_components.id]
-  provider varchar(50) [not null]
-  reference_code varchar(255) [not null]
-  status varchar(50)
-  created_at timestamp [default: `CURRENT_TIMESTAMP`]
-  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+TableGroup "💬 Chat & Messaging" {
+  chats
+  chat_messages
 }
 
-//// Relationships
-// Ref: user_preferences.user_id > users.id
-// Ref: trips.user_id > users.id
-// Ref: packages.trip_id > trips.id
-// Ref: trip_components.trip_id > trips.id
-// Ref: trip_components.package_id > packages.id
-// Ref: booking_references.user_id > users.id
-// Ref: booking_references.trip_component_id > trip_components.id
+TableGroup "✈️ Travel Planning" {
+  plans
+}
 
-//// Grouping for clarity
-// Group "User Management" {
-//   users
-//   user_preferences
-// }
+// ============================================
+// Relationship Definitions
+// ============================================
 
-// Group "Trip Planning" {
-//   trips
-//   packages
-//   trip_components
-// }
-
-// Group "Bookings" {
-//   booking_references
-// }
-
-//// Notes
-// Note: users {
-//   This table stores all registered users and their credentials.
-// }
-
-// Note: trips {
-//   A trip is the main container requested by a user (origin, destination, dates, etc.).
-// }
-
-// Note: packages {
-//   AI-generated package options for a trip, including flights, hotels, and more.
-// }
-
-// Note: trip_components {
-//   The FINAL selected components from a chosen package.
-// }
-
-// Note: booking_references {
-//   Future feature to track external provider confirmations (e.g., Expedia).
-// }
-
+Ref: user_preferences.user_id > users.id [delete: cascade]
+Ref: token_blacklist.user_id > users.id [delete: cascade]
+Ref: chats.user_id > users.id [delete: set null]
+Ref: chat_messages.chat_id > chats.id [delete: cascade]
+Ref: plans.chat_id > chats.id [delete: cascade]

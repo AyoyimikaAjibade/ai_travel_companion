@@ -27,15 +27,40 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      - name: Extract metadata for backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata for ai-service
+        id: meta-ai
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
       - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest,mode=max
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:buildcache,mode=max
 
       - name: Build and push AI service image
         uses: docker/build-push-action@v5
@@ -43,14 +68,15 @@ jobs:
           context: ./ai
           file: ./ai/Dockerfile.ai
           push: true
-          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest,mode=max
+          tags: ${{ steps.meta-ai.outputs.tags }}
+          labels: ${{ steps.meta-ai.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:buildcache,mode=max
 
-      - name: Verify images pushed
+      - name: Output image tags
         run: |
-          echo "✅ Backend image: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest"
-          echo "✅ AI service image: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest"
+          echo "Backend image: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-backend:latest"
+          echo "AI service image: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-travel-ai-service:latest"
 
   deploy-to-vms:
     name: Deploy to LinuxONE VMs via SSH
@@ -66,6 +92,13 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Display SSH key fingerprint (for debugging)
+        run: |
+          echo "SSH key loaded:"
+          ssh-add -l || echo "No keys loaded"
+          echo ""
+          echo "Testing SSH connection..."
+
       - name: Deploy to each VM
         env:
           VM_IPS: ${{ secrets.VM_IPS }}
@@ -75,10 +108,23 @@ jobs:
         run: |
           IFS=',' read -ra VM_ARRAY <<< "$VM_IPS"
           for VM_IP in "${VM_ARRAY[@]}"; do
-            VM_IP=$(echo "$VM_IP" | xargs)
+            VM_IP=$(echo "$VM_IP" | xargs)  # Trim whitespace
             echo "🚀 Deploying to VM: $VM_IP"
+            echo "SSH User: $SSH_USER"
             
+            # Add VM to known hosts
             ssh-keyscan -H "$VM_IP" >> ~/.ssh/known_hosts 2>/dev/null || true
+            
+            # Test SSH connection first
+            echo "Testing SSH connection..."
+            ssh -v -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} "echo 'SSH connection successful!'" || {
+              echo "❌ SSH connection failed!"
+              echo "Please verify:"
+              echo "1. SSH_PRIVATE_KEY secret matches the public key on the VM"
+              echo "2. SSH_USER secret is correct: $SSH_USER"
+              echo "3. Public key is in ~/.ssh/authorized_keys on the VM"
+              exit 1
+            }
             
             # Create deployment directory on VM
             ssh -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} \
@@ -95,59 +141,132 @@ jobs:
             # Deploy on VM
             ssh -o StrictHostKeyChecking=no ${SSH_USER}@${VM_IP} bash << DEPLOY_SCRIPT
               set -e
+              DOCKER_USER="${DOCKER_HUB_USERNAME}"
               cd ~/ai-travel-companion
               
-              echo "🔐 Logging into Docker Hub..."
-              echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin 2>&1 | grep -v "WARNING" || true
+              # Login to Docker Hub on the VM
+              echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin || true
               
-              echo "📦 Updating docker-compose.yml with image references..."
-              # Backup original file
-              cp docker-compose.yml docker-compose.yml.bak
+              # Create a deployment-ready docker-compose.yml with image references
+              cat > docker-compose.prod.yml << 'COMPOSE_EOF'
+          services:
+            db:
+              image: postgres:13-alpine
+              container_name: ai_travel_db
+              environment:
+                POSTGRES_DB: ${POSTGRES_DB:-twos_db}
+                POSTGRES_USER: ${POSTGRES_USER:-postgres}
+                POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+              ports:
+                - "5432:5432"
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+              networks:
+                - ai_travel_network
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-twos_db}"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 30s
+
+            ai_service:
+              image: DOCKER_USER_PLACEHOLDER/ai-travel-ai-service:latest
+              container_name: ai_travel_ai
+              ports:
+                - "8000:8000"
+              environment:
+                GEMINI_API_KEY: ${GEMINI_API_KEY}
+                AMADEUS_API_KEY: ${AMADEUS_API_KEY}
+                AMADEUS_API_SECRET: ${AMADEUS_API_SECRET}
+                BACKEND_SERVICE_BASE_URL: ${BACKEND_SERVICE_BASE_URL:-http://backend:8001}
+              networks:
+                - ai_travel_network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 10s
+
+            backend:
+              image: DOCKER_USER_PLACEHOLDER/ai-travel-backend:latest
+              container_name: ai_travel_backend
+              ports:
+                - "8001:8000"
+              environment:
+                DATABASE_URL: postgresql://\${POSTGRES_USER:-postgres}:\${POSTGRES_PASSWORD:-postgres}@db:5432/\${POSTGRES_DB:-twos_db}
+                SECRET_KEY: \${SECRET_KEY:-your-super-secret-key-change-in-production}
+                JWT_SECRET_KEY: \${JWT_SECRET_KEY:-your-jwt-secret-key}
+                ACCESS_TOKEN_EXPIRE_MINUTES: \${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+                SERVER_HOST: 0.0.0.0
+                SERVER_PORT: 8000
+                DEBUG: \${DEBUG:-false}
+                ENVIRONMENT: ${ENVIRONMENT:-production}
+                WORKERS: ${WORKERS:-1}
+                CORS_ORIGINS: ${CORS_ORIGINS:-*}
+                UPLOAD_FOLDER: uploads
+                MAX_CONTENT_LENGTH: ${MAX_CONTENT_LENGTH:-16777216}
+                RATE_LIMIT: ${RATE_LIMIT:-100/minute}
+                LOG_LEVEL: ${LOG_LEVEL:-INFO}
+                LOG_FILE: logs/app.log
+              volumes:
+                - ./backend/uploads:/app/uploads
+                - ./backend/logs:/app/logs
+              depends_on:
+                db:
+                  condition: service_healthy
+              networks:
+                - ai_travel_network
+              healthcheck:
+                test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health')"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+              restart: unless-stopped
+
+          volumes:
+            postgres_data:
+              driver: local
+
+          networks:
+            ai_travel_network:
+              driver: bridge
+          COMPOSE_EOF
               
-              # Replace backend build block with image reference
-              awk -v backend_img="$DOCKER_HUB_USERNAME/ai-travel-backend:latest" -v ai_img="$DOCKER_HUB_USERNAME/ai-travel-ai-service:latest" '
-                BEGIN { in_backend=0; in_ai=0; skip_lines=0 }
-                /^  backend:/ { in_backend=1; in_ai=0; skip_lines=0; print; next }
-                /^  ai_service:/ { in_ai=1; in_backend=0; skip_lines=0; print; next }
-                /^  [a-z_]+:/ { in_backend=0; in_ai=0; skip_lines=0 }
-                
-                in_backend && /^    build:/ { 
-                  print "    image: " backend_img
-                  skip_lines=1
-                  next
-                }
-                in_ai && /^    build:/ {
-                  print "    image: " ai_img
-                  skip_lines=1
-                  next
-                }
-                
-                (in_backend || in_ai) && skip_lines && /^    (context|dockerfile):/ { next }
-                (in_backend || in_ai) && skip_lines && /^    [a-z_]/ { skip_lines=0 }
-                
-                { print }
-              ' docker-compose.yml.bak > docker-compose.yml
+              # Replace placeholder with actual Docker Hub username
+              sed -i "s|DOCKER_USER_PLACEHOLDER|${DOCKER_USER}|g" docker-compose.prod.yml
               
-              echo "🛑 Stopping existing containers..."
-              docker-compose down || true
+              # Stop existing containers
+              docker-compose -f docker-compose.prod.yml down || true
               
-              echo "⬇️ Pulling latest images..."
-              docker-compose pull || true
+              # Pull latest images
+              docker-compose -f docker-compose.prod.yml pull || true
               
-              echo "🚀 Starting services..."
-              docker-compose up -d --remove-orphans
+              # Start services
+              docker-compose -f docker-compose.prod.yml up -d --remove-orphans
               
+              # Wait for services to be healthy
               echo "⏳ Waiting for services to start..."
               sleep 15
               
+              # Check service status
               echo "📊 Service status:"
-              docker-compose ps
+              docker-compose -f docker-compose.prod.yml ps
               
-              if docker-compose ps | grep -q "Up"; then
+              # Show logs for debugging (last 30 lines)
+              echo "=== Backend logs ==="
+              docker-compose -f docker-compose.prod.yml logs --tail=30 backend || true
+              echo "=== AI Service logs ==="
+              docker-compose -f docker-compose.prod.yml logs --tail=30 ai_service || true
+              
+              # Verify services are running
+              if docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
                 echo "✅ Deployment successful!"
               else
                 echo "⚠️ Warning: Some services may not be running"
-                docker-compose ps
                 exit 1
               fi
           DEPLOY_SCRIPT
