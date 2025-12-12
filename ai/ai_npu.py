@@ -3,10 +3,9 @@
 # 1. Get you Gemini API key and copy to .env file
 # 2. python3 -m venv venv && source venv/bin/activate && pip install -U uvicorn fastapi python-dotenv requests ulid-py
 
-# 3. source venv/bin/activate
-# 4. python3 -m uvicorn ai_npu:app --reload --host 0.0.0.0
-# 5. Swagger UI: http://127.0.0.1:8000/docs
-# 6. deactivate (to close venv)
+# 3. source venv/bin/activate && python3 -m uvicorn ai_npu:app --reload --host 0.0.0.0
+# 4. Swagger UI: http://127.0.0.1:8000/docs
+# 5. deactivate (to close venv)
 # -------------------------------------------------------------------
 
 from fastapi import FastAPI
@@ -317,6 +316,19 @@ def chat(
         actions = detect_refresh_actions(cached_slots, new_current_slots)
         print(f"\n🔄 Refresh plan actions: {actions}")
 
+        # If the only change is attractions, skip re-running other costly searches
+        attractions_only_update = (
+            actions["refresh_attractions"]
+            and not any(
+                [
+                    actions["refresh_all"],
+                    actions.get("refresh_flight"),
+                    actions.get("refresh_hotel"),
+                    actions.get("refresh_car"),
+                ]
+            )
+        )
+
         if cached_plan and cached_plan["slots"] == slot_snapshot and not any(actions.values()):
             return ParseResponse(
                 current_slots=new_current_slots,
@@ -353,6 +365,8 @@ def chat(
             new_current_slots.pax.adults is not None
         ])
         should_search_flights = actions["refresh_all"] or actions["refresh_flight"] or flight is None
+        if attractions_only_update:
+            should_search_flights = False
         print(f"\n✅ CAN SEARCH FLIGHTS: {can_search_flights} | SHOULD SEARCH: {should_search_flights} ✅")
         flight_total_price = 0
 
@@ -391,6 +405,8 @@ def chat(
             new_current_slots.pax.adults is not None
         ])
         should_search_hotels = (actions["refresh_all"] or actions["refresh_hotel"] or (hotel is None and new_current_slots.hotel.request is True)) and not actions["clear_hotel"]
+        if attractions_only_update:
+            should_search_hotels = False
         print(f"\n✅ CAN SEARCH HOTELS: {can_search_hotels} | SHOULD SEARCH: {should_search_hotels} ✅")
         hotel_total_price = hotel.total_price if hotel else 0
 
@@ -449,6 +465,8 @@ def chat(
         # --- Car Search ---
         can_search_car = new_current_slots.car is True
         should_search_car = (actions["refresh_all"] or actions["refresh_car"] or (car is None and can_search_car)) and not actions["clear_car"]
+        if attractions_only_update:
+            should_search_car = False
         print(f"\n✅ CAN SEARCH CAR: {can_search_car} | SHOULD SEARCH: {should_search_car} ✅")
         car_total_price = 0
 
